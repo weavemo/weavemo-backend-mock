@@ -4,7 +4,7 @@ from schemas.auth import LoginRequest, RegisterRequest, AuthResponse
 from core.supabase import supabase
 from dependencies.auth import get_current_user
 
-router = APIRouter(prefix="/auth", tags=["Auth"])
+router = APIRouter()
 
 
 @router.post("/register", response_model=AuthResponse)
