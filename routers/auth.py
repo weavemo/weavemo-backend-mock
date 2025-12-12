@@ -1,48 +1,61 @@
-
-from fastapi import APIRouter, HTTPException
+# routers/auth.py
+from fastapi import APIRouter, HTTPException, Depends
 from schemas.auth import LoginRequest, RegisterRequest, AuthResponse
-from models.user import User
-from db.fake_db import fake_users, current_id
+from core.supabase import supabase
+from dependencies.auth import get_current_user
 
-router = APIRouter()
+router = APIRouter(prefix="/auth", tags=["Auth"])
+
 
 @router.post("/register", response_model=AuthResponse)
 def register(body: RegisterRequest):
-    global current_id
+    res = supabase.auth.sign_up({
+        "email": body.email,
+        "password": body.password,
+        "options": {
+            "data": {
+                "nickname": body.nickname
+            }
+        }
+    })
 
-    if body.email in fake_users:
-        raise HTTPException(400, "Email already exists")
-
-    user = User(id=current_id, email=body.email, password=body.password, nickname=body.nickname)
-    fake_users[body.email] = user
-    current_id += 1
+    if not res.user or not res.session:
+        raise HTTPException(status_code=400, detail="Registration failed")
 
     return {
         "user": {
-            "id": user.id,
-            "email": user.email,
-            "nickname": user.nickname
+            "id": res.user.id,
+            "email": res.user.email,
+            "nickname": res.user.user_metadata.get("nickname"),
         },
-        "token": "mock_access_token",
-        "refreshToken": "mock_refresh_token"
+        "token": res.session.access_token,
+        "expiresIn": res.session.expires_in,
     }
+
 
 @router.post("/login", response_model=AuthResponse)
 def login(body: LoginRequest):
-    if body.email not in fake_users:
-        raise HTTPException(400, "User not found")
+    res = supabase.auth.sign_in_with_password({
+        "email": body.email,
+        "password": body.password,
+    })
 
-    user = fake_users[body.email]
-
-    if user.password != body.password:
-        raise HTTPException(401, "Invalid password")
+    if not res.user or not res.session:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
     return {
         "user": {
-            "id": user.id,
-            "email": user.email,
-            "nickname": user.nickname
+            "id": res.user.id,
+            "email": res.user.email,
+            "nickname": res.user.user_metadata.get("nickname"),
         },
-        "token": "mock_access_token",
-        "refreshToken": "mock_refresh_token"
+        "token": res.session.access_token,
+        "expiresIn": res.session.expires_in,
+    }
+
+
+@router.get("/profile")
+def profile(current_user=Depends(get_current_user)):
+    return {
+        "user": current_user
     }
