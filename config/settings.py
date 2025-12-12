@@ -10,8 +10,7 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: str
 
     # JWT (reserved - not used with Supabase Auth)
-    JWT_SECRET: str
-    JWT_ALGORITHM: str = "HS256"
+    SUPABASE_JWT_SECRET: str
     JWT_EXPIRE_MINUTES: int = 60
 
     class Config:
