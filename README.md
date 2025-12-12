@@ -42,6 +42,8 @@ class UserResponse(BaseModel):
 def login(...):
     return auth_service.login(...)
 
+
+
 5️⃣ 인증/권한은 Supabase에 위임
 
 ❌ JWT 직접 발급
@@ -49,4 +51,12 @@ def login(...):
 
 ✔ Supabase Auth
 ✔ RLS
+
+# .env 예시
+ENV=local
+
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=xxxx
+
+JWT_SECRET=dev-secret
 
