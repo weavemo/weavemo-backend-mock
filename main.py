@@ -1,8 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import auth, user
+from db.database import SessionLocal
 
 app = FastAPI()
+
+# db 설정
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 
 # ⭐ CORS 설정
 app.add_middleware(
