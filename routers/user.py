@@ -1,18 +1,12 @@
-from fastapi import APIRouter
-from db.fake_db import fake_users
+# routers/user.py
+from fastapi import APIRouter, Depends
+from dependencies.auth import get_current_user
 
-router = APIRouter()
+router = APIRouter(prefix="/users", tags=["Users"])
 
-@router.get("/profile")
-def profile():
-    # 그냥 첫 유저 반환 (mock)
-    for email, user in fake_users.items():
-        return {
-            "user": {
-                "id": user.id,
-                "email": user.email,
-                "nickname": user.nickname
-            }
-        }
-    return {"user": None}
 
+@router.get("/me")
+def get_my_profile(current_user=Depends(get_current_user)):
+    return {
+        "user": current_user
+    }
