@@ -13,4 +13,5 @@ class RegisterRequest(BaseModel):
 class AuthResponse(BaseModel):
     user: dict
     token: str
-    refreshToken: str
+    epiresIn: int
+    refreshToken: str | None = None
