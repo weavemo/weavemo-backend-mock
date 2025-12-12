@@ -57,5 +57,8 @@ def login(body: LoginRequest):
 @router.get("/profile")
 def profile(current_user=Depends(get_current_user)):
     return {
-        "user": current_user
+        "user": {
+            "id": current_user["id"],
+            "email": current_user["email"],
+        }
     }
