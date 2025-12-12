@@ -1,5 +1,6 @@
 
 from pydantic import BaseModel
+from typing import Optional
 
 class LoginRequest(BaseModel):
     email: str
@@ -14,4 +15,4 @@ class AuthResponse(BaseModel):
     user: dict
     token: str
     epiresIn: int
-    refreshToken: str | None = None
+    refreshToken: Optional[str] = None
