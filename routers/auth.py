@@ -42,8 +42,27 @@ def register(body: RegisterRequest):
         "token": res.session.access_token,
         "expiresIn": res.session.expires_in,
     }
+@router.post("/login")
+def login(body: LoginRequest):
+    supabase = get_supabase()
 
+    try:
+        res = supabase.auth.sign_in_with_password({
+            "email": body.email,
+            "password": body.password,
+        })
+        return {
+            "ok": True,
+            "has_user": bool(res.user),
+            "has_session": bool(res.session),
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "type": str(type(e)),
+        }
 
+"""
 @router.post("/login", response_model=AuthResponse)
 def login(body: LoginRequest):
     supabase = get_supabase()
@@ -76,7 +95,7 @@ def login(body: LoginRequest):
         "refreshToken": None,
     }
 
-
+"""
 @router.get("/profile")
 def profile(current_user=Depends(get_current_user)):
     return {"user": current_user}
