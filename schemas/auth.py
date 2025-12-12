@@ -14,5 +14,5 @@ class RegisterRequest(BaseModel):
 class AuthResponse(BaseModel):
     user: dict
     token: str
-    epiresIn: int
+    expiresIn: int
     refreshToken: Optional[str] = None
