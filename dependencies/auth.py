@@ -14,8 +14,8 @@ def get_current_user(
     try:
         payload = jwt.decode(
             token,
-            settings.JWT_SECRET,
-            algorithms=[settings.JWT_ALGORITHM],
+            settings.SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
             audience="authenticated",
         )
     except JWTError:
@@ -23,8 +23,15 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
         )
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
 
     return {
-        "id": payload["sub"],
+        "id": user_id,                # Supabase user UUID
         "email": payload.get("email"),
+        "role": payload.get("role"),  # optional
     }
