@@ -20,7 +20,8 @@ def register(body: RegisterRequest):
     })
 
     if not res.user or not res.session:
-        raise HTTPException(status_code=400, detail="Registration failed")
+        except AuthApiError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     return {
         "user": {
@@ -41,7 +42,8 @@ def login(body: LoginRequest):
     })
 
     if not res.user or not res.session:
-        excetp AuthApiError as e:
+        except AuthApiError as e:
+       
             raise HTTPException(status_code=401, detail=str(e))
 
     return {
