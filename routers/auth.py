@@ -41,7 +41,8 @@ def login(body: LoginRequest):
     })
 
     if not res.user or not res.session:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        excetp AuthApiError as e:
+            raise HTTPException(status_code=401, detail=str(e))
 
     return {
         "user": {
