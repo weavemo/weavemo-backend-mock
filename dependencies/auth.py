@@ -16,7 +16,7 @@ def get_current_user(
             token,
             settings.SUPABASE_JWT_SECRET,
             algorithms=["HS256"],
-            audience="authenticated",
+            options={"verify_aud": False},  # ⭐ 핵심audience="authenticated",
         )
     except JWTError:
         raise HTTPException(
