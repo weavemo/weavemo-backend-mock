@@ -77,4 +77,5 @@ def login(body: LoginRequest):
 
 @router.get("/profile")
 def profile(current_user=Depends(get_current_user)):
+    print("auth profile hit")
     return {"user": current_user}
