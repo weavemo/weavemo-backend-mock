@@ -1,6 +1,7 @@
 # weavemo-backend/schemas/mood.py
 from typing import List, Optional
 from pydantic import BaseModel, Field
+from enum import Enum
 
 
 class MoodInput(BaseModel):
@@ -22,3 +23,51 @@ class MoodResult(BaseModel):
     triggerType: Optional[str]
     note: Optional[str]
     tagIds: List[str]
+
+# -------------------------
+# Analysis enums
+# -------------------------
+class SummaryLabel(str, Enum):
+    LOW_VALENCE_LOW_ENERGY = "LOW_VALENCE_LOW_ENERGY"
+    LOW_VALENCE_HIGH_ENERGY = "LOW_VALENCE_HIGH_ENERGY"
+    HIGH_VALENCE_LOW_ENERGY = "HIGH_VALENCE_LOW_ENERGY"
+    HIGH_VALENCE_HIGH_ENERGY = "HIGH_VALENCE_HIGH_ENERGY"
+    NEUTRAL = "NEUTRAL"
+
+
+# -------------------------
+# Analysis sub models
+# -------------------------
+class MoodAnalysisSummary(BaseModel):
+    mainValence: int
+    energy: int
+    label: SummaryLabel
+    hasNote: bool
+
+
+class MoodAnalysisPoint(BaseModel):
+    date: str
+    mainValence: int
+    energy: int
+
+
+class MoodTagSummaryItem(BaseModel):
+    code: str
+    count: int
+
+
+class TodayMoodInfo(BaseModel):
+    moodId: int
+    note: Optional[str]
+    triggerType: Optional[str]
+
+
+# -------------------------
+# Analysis response
+# -------------------------
+class MoodAnalysisResponse(BaseModel):
+    range: str
+    summary: MoodAnalysisSummary
+    points: List[MoodAnalysisPoint]
+    tagsSummary: List[MoodTagSummaryItem]
+    todayMood: Optional[TodayMoodInfo] = None
