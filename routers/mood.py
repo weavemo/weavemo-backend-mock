@@ -4,11 +4,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from db.database import get_supabase
 from dependencies.auth import get_current_user
-from schemas.mood import MoodInput, MoodResult
+from schemas.mood import MoodInput, MoodResult, MoodAnalysisResponse
+from services.mood_service import get_mood_analysis
 
 router = APIRouter()
 
@@ -103,3 +104,37 @@ def submit_mood(
         note=payload.note,
         tagIds=tag_codes,
     )
+
+
+# --------------------------------------
+# Week 4 — Mood Analysis
+# --------------------------------------
+@router.get(
+    "/analysis",
+    response_model=MoodAnalysisResponse,
+    status_code=status.HTTP_200_OK,
+)
+def get_analysis(
+    range: str = Query("today", regex="^(today|7d|30d)$"),
+    supabase=Depends(get_supabase),
+    current_user=Depends(get_current_user),
+):
+    """
+    Week 4:
+    - range: today | 7d | 30d
+    - 분석은 집계 기반 (AI ❌)
+    """
+
+    user_id: int = current_user["user_id"]
+
+    try:
+        return get_mood_analysis(
+            supabase=supabase,
+            user_id=user_id,
+            range_key=range,
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid range value",
+        )
