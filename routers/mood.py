@@ -10,7 +10,7 @@ from db.database import get_supabase
 from dependencies.auth import get_current_user
 from schemas.mood import MoodInput, MoodResult
 
-router = APIRouter(prefix="/mood", tags=["mood"])
+router = APIRouter()
 
 
 @router.post(
