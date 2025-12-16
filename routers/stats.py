@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from datetime import date
 
 from dependencies.auth import get_current_user
-from db.database import supabase
+from db.database import get_supabase
 from services.stats_service import (
     calculate_level,
     apply_daily_xp,
@@ -16,7 +16,7 @@ router = APIRouter()
 def get_stats_profile(current_user=Depends(get_current_user)):
     user_id = current_user["id"]
 
-    res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
+    res = get_supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
     row = res.data[0]
 
     return {
@@ -38,7 +38,7 @@ def increment_xp(
     user_id = current_user["id"]
     today = date.today()
 
-    res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
+    res = get_supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
     row = res.data[0]
 
     # reset daily xp if date changed
@@ -58,7 +58,7 @@ def increment_xp(
     elif delta == -1:
         new_streak = 1
 
-    supabase.table("user_stats").update({
+    get_supabase.table("user_stats").update({
         "xp": new_xp,
         "level": new_level,
         "daily_xp": new_daily_xp,
