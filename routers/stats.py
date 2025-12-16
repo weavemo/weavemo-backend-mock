@@ -14,9 +14,10 @@ router = APIRouter()
 
 @router.get("/profile")
 def get_stats_profile(current_user=Depends(get_current_user)):
+    supabase = get_supabase()
     user_id = current_user["id"]
 
-    res = get_supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
+    res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
     row = res.data[0]
 
     return {
@@ -35,10 +36,11 @@ def increment_xp(
     source: str = Query(...),
     current_user=Depends(get_current_user),
 ):
+    supabase = get_supabase()
     user_id = current_user["id"]
     today = date.today()
 
-    res = get_supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
+    res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
     row = res.data[0]
 
     # reset daily xp if date changed
@@ -58,7 +60,7 @@ def increment_xp(
     elif delta == -1:
         new_streak = 1
 
-    get_supabase.table("user_stats").update({
+    supabase.table("user_stats").update({
         "xp": new_xp,
         "level": new_level,
         "daily_xp": new_daily_xp,
