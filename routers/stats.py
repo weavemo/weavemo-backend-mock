@@ -9,7 +9,7 @@ from services.stats_service import (
     calc_streak,
 )
 
-router = APIRouter(prefix="/stats", tags=["Stats"])
+router = APIRouter()
 
 
 @router.get("/profile")
