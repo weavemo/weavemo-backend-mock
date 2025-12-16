@@ -15,7 +15,7 @@ router = APIRouter()
 @router.get("/profile")
 def get_stats_profile(current_user=Depends(get_current_user)):
     supabase = get_supabase()
-    user_id = current_user["id"]
+    user_id = current_user["user_id"]
 
     res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
     # ✅ 없으면 생성
@@ -45,7 +45,7 @@ def increment_xp(
     current_user=Depends(get_current_user),
 ):
     supabase = get_supabase()
-    user_id = current_user["id"]
+    user_id = current_user["user_id"]
     today = date.today()
 
     res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
