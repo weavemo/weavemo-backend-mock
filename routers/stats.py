@@ -18,6 +18,14 @@ def get_stats_profile(current_user=Depends(get_current_user)):
     user_id = current_user["id"]
 
     res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
+    # ✅ 없으면 생성
+    if not res.data:
+        supabase.table("user_stats").insert({
+            "user_id": user_id,
+        }).execute()
+
+        res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
+
     row = res.data[0]
 
     return {
