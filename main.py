@@ -16,6 +16,6 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(user.router, prefix="/user", tags=["Users"])
 app.include_router(mood.router, prefix="/mood", tags=["Mood"])
-app.include_souter(stats.router,prefix="/stats",tags=["Stats"]
+app.include_router(stats.router,prefix="/stats",tags=["Stats"])
 
 
