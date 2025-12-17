@@ -90,6 +90,10 @@ def increment_xp(
         if dup.data:
             return {
                 "gained_xp": 0,
+                "total_xp": None,
+                "level": None,
+                "daily_xp": None,
+                "streak_days": None,
                 "blocked": True,
             }
 
@@ -97,6 +101,7 @@ def increment_xp(
         supabase.table("action_logs").insert({
             "user_id": user_id,
             "action_id": action_id,
+            "started_at": datetime.utcnow().isoformat(),
         }).execute()
 
     # ---- 기존 로직 ----
@@ -108,7 +113,11 @@ def increment_xp(
         daily_xp = 0
 
     new_daily_xp, gained = apply_daily_xp(daily_xp, amount)
-    new_xp = row["xp"] + gained
+    # ✅ 핵심 수정
+    if gained == 0:
+        new_xp = row["xp"]
+    else:
+        new_xp = row["xp"] + gained
     new_level = calculate_level(new_xp)
 
     delta = calc_streak(row["last_checkin_date"], date.today())
