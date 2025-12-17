@@ -43,7 +43,7 @@ def get_stats_profile(current_user=Depends(get_current_user)):
 def get_completed_actions_today(current_user=Depends(get_current_user)):
     supabase = get_supabase()
     user_id = current_user["user_id"]
-    today = date.today().isoformat()
+    today = date.today()
 
     res = (
         supabase.table("action_logs")
