@@ -97,15 +97,14 @@ def increment_xp(
         supabase.table("action_logs").insert({
             "user_id": user_id,
             "action_id": action_id,
-            "action_date": today,
         }).execute()
 
     # ---- 기존 로직 ----
     res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
     row = res.data[0]
-
+    today_str = today.isoformat()
     daily_xp = row["daily_xp"]
-    if row["daily_xp_date"] != today:
+    if row["daily_xp_date"] != today_str:
         daily_xp = 0
 
     new_daily_xp, gained = apply_daily_xp(daily_xp, amount)
@@ -123,9 +122,9 @@ def increment_xp(
         "xp": new_xp,
         "level": new_level,
         "daily_xp": new_daily_xp,
-        "daily_xp_date": today,
+        "daily_xp_date": today_str,
         "streak_days": new_streak,
-        "last_checkin_date": today,
+        "last_checkin_date": today_str,
         "updated_at": "now()",
     }).eq("user_id", user_id).execute()
 
