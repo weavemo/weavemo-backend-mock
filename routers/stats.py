@@ -43,17 +43,17 @@ def get_stats_profile(current_user=Depends(get_current_user)):
 def get_completed_actions_today(current_user=Depends(get_current_user)):
     supabase = get_supabase()
     user_id = current_user["user_id"]
-    today = date.today()
+    today = date.today().isoformat()
 
     res = (
         supabase.table("action_logs")
-        .select("action_code")
+        .select("action_id")
         .eq("user_id", user_id)
         .eq("action_date", today)
         .execute()
     )
 
-    actions = [r["action_code"] for r in res.data] if res.data else []
+    actions = [r["action_id"] for r in res.data] if res.data else []
     return {"actions": actions}
 
 
@@ -61,7 +61,7 @@ def get_completed_actions_today(current_user=Depends(get_current_user)):
 def increment_xp(
     amount: int = Query(..., gt=0),
     source: str = Query(...),
-    action_code: str | None = Query(None),
+    action_id: int | None = Query(None),
     current_user=Depends(get_current_user),
 ):
     supabase = get_supabase()
@@ -69,12 +69,12 @@ def increment_xp(
     today = date.today().isoformat()
 
     # 🔒 ACTION 중복 가드
-    if source == "action" and action_code:
+    if source == "action" and action_id:
         dup = (
             supabase.table("action_logs")
             .select("id")
             .eq("user_id", user_id)
-            .eq("action_code", action_code)
+            .eq("action_id", action_id)
             .eq("action_date", today)
             .limit(1)
             .execute()
@@ -89,7 +89,7 @@ def increment_xp(
         # 로그 기록
         supabase.table("action_logs").insert({
             "user_id": user_id,
-            "action_code": action_code,
+            "action_id": action_id,
             "action_date": today,
         }).execute()
 
