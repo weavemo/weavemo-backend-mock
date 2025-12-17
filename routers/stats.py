@@ -43,13 +43,17 @@ def get_stats_profile(current_user=Depends(get_current_user)):
 def get_completed_actions_today(current_user=Depends(get_current_user)):
     supabase = get_supabase()
     user_id = current_user["user_id"]
-    today = date.today().isoformat()
+    today = date.today()
+    start = datetime.combine(today, time.min).isoformat()
+    end = datetime.combine(today, time.max).isoformat()
+
 
     res = (
         supabase.table("action_logs")
         .select("action_id")
         .eq("user_id", user_id)
-        .eq("action_date", today)
+        .gte("started_at", start)   # ✅ action_date 대신 started_at
+        .lte("started_at", end)
         .execute()
     )
 
@@ -66,7 +70,9 @@ def increment_xp(
 ):
     supabase = get_supabase()
     user_id = current_user["user_id"]
-    today = date.today().isoformat()
+    today = date.today()
+    start = datetime.combine(today, time.min).isoformat()
+    end = datetime.combine(today, time.max).isoformat()
 
     # 🔒 ACTION 중복 가드
     if source == "action" and action_id:
@@ -75,7 +81,8 @@ def increment_xp(
             .select("id")
             .eq("user_id", user_id)
             .eq("action_id", action_id)
-            .eq("action_date", today)
+            .gte("started_at", start)
+            .lte("started_at", end)
             .limit(1)
             .execute()
         )
