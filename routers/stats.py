@@ -1,3 +1,5 @@
+# /routers/stats.py
+
 from fastapi import APIRouter, Depends, Query
 from datetime import date
 
@@ -37,31 +39,73 @@ def get_stats_profile(current_user=Depends(get_current_user)):
         "plan": row["plan"],
     }
 
+@router.get("/actions/completed/today")
+def get_completed_actions_today(current_user=Depends(get_current_user)):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+    today = date.today().isoformat()
+
+    res = (
+        supabase.table("action_logs")
+        .select("action_code")
+        .eq("user_id", user_id)
+        .eq("action_date", today)
+        .execute()
+    )
+
+    actions = [r["action_code"] for r in res.data] if res.data else []
+    return {"actions": actions}
+
 
 @router.post("/xp/increment")
 def increment_xp(
     amount: int = Query(..., gt=0),
     source: str = Query(...),
+    action_code: str | None = Query(None),
     current_user=Depends(get_current_user),
 ):
     supabase = get_supabase()
     user_id = current_user["user_id"]
-    today = date.today()
+    today = date.today().isoformat()
 
+    # 🔒 ACTION 중복 가드
+    if source == "action" and action_code:
+        dup = (
+            supabase.table("action_logs")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("action_code", action_code)
+            .eq("action_date", today)
+            .limit(1)
+            .execute()
+        )
+
+        if dup.data:
+            return {
+                "gained_xp": 0,
+                "blocked": True,
+            }
+
+        # 로그 기록
+        supabase.table("action_logs").insert({
+            "user_id": user_id,
+            "action_code": action_code,
+            "action_date": today,
+        }).execute()
+
+    # ---- 기존 로직 ----
     res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
     row = res.data[0]
 
-    # reset daily xp if date changed
     daily_xp = row["daily_xp"]
-    if row["daily_xp_date"] != today.isoformat():
+    if row["daily_xp_date"] != today:
         daily_xp = 0
 
     new_daily_xp, gained = apply_daily_xp(daily_xp, amount)
     new_xp = row["xp"] + gained
     new_level = calculate_level(new_xp)
 
-    # streak
-    delta = calc_streak(row["last_checkin_date"], today)
+    delta = calc_streak(row["last_checkin_date"], date.today())
     new_streak = row["streak_days"]
     if delta == 1:
         new_streak += 1
@@ -72,9 +116,9 @@ def increment_xp(
         "xp": new_xp,
         "level": new_level,
         "daily_xp": new_daily_xp,
-        "daily_xp_date": today.isoformat(),
+        "daily_xp_date": today,
         "streak_days": new_streak,
-        "last_checkin_date": today.isoformat(),
+        "last_checkin_date": today,
         "updated_at": "now()",
     }).eq("user_id", user_id).execute()
 
@@ -84,4 +128,5 @@ def increment_xp(
         "level": new_level,
         "streak_days": new_streak,
         "daily_xp": new_daily_xp,
+        "blocked": False,
     }
