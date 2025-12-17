@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import auth, user, mood, stats, action
+from routers import auth, user, mood, stats, action, journal
 
 app = FastAPI()
 
@@ -18,6 +18,7 @@ app.include_router(user.router, prefix="/user", tags=["Users"])
 app.include_router(mood.router, prefix="/mood", tags=["Mood"])
 app.include_router(stats.router,prefix="/stats",tags=["Stats"])
 app.include_router(action.router, prefix="/actions", tags=["actions"])
+app.include_router(journal.router, prefix="/journals", tags=["Journal"])
 
 
 
