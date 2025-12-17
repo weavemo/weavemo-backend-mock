@@ -1,13 +1,13 @@
 # routers/journal.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
+from datetime import date
 from dependencies.auth import get_current_user
 from db.database import get_supabase
 from schemas.journal import JournalCreate
+from services.stats_service import apply_daily_xp, calculate_level, calc_streak
 
 router = APIRouter()
 
-
-# CREATE
 @router.post("")
 def create_journal(
     body: JournalCreate,
@@ -15,48 +15,60 @@ def create_journal(
 ):
     supabase = get_supabase()
     user_id = current_user["user_id"]
+    today = date.today()
 
-    res = supabase.table("journals").insert({
-        "user_id": user_id,
-        "content": body.content,
-    }).execute()
-
-    return res.data[0]
-
-
-# LIST
-@router.get("")
-def list_journals(current_user=Depends(get_current_user)):
-    supabase = get_supabase()
-    user_id = current_user["user_id"]
-
-    res = (
+    # 🔒 하루 1회 체크
+    exists = (
         supabase.table("journals")
-        .select("*")
+        .select("id")
         .eq("user_id", user_id)
-        .order("created_at", desc=True)
-        .execute()
-    )
-
-    return {"items": res.data}
-
-
-# DETAIL
-@router.get("/{journal_id}")
-def get_journal(journal_id: int, current_user=Depends(get_current_user)):
-    supabase = get_supabase()
-    user_id = current_user["user_id"]
-
-    res = (
-        supabase.table("journals")
-        .select("*")
-        .eq("id", journal_id)
-        .eq("user_id", user_id)
+        .gte("created_at", today.isoformat())
         .limit(1)
         .execute()
     )
 
-    if not res.data:
-        raise HTTPException(status_code=404, detail="Journal not found")
+    if exists.data:
+        return {"ok": True, "xp_gained": 0, "blocked": True}
 
-    return res.data[0]
+    # 1) journal 저장
+    supabase.table("journals").insert({
+        "user_id": user_id,
+        "content": body.content,
+    }).execute()
+
+    # 2) stats 업데이트 (+10 XP)
+    stats_res = (
+        supabase.table("user_stats")
+        .select("*")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    row = stats_res.data[0]
+
+    new_daily_xp, gained = apply_daily_xp(row["daily_xp"], 10)
+    new_xp = row["xp"] + gained
+    new_level = calculate_level(new_xp)
+
+    delta = calc_streak(row["last_checkin_date"], today)
+    new_streak = row["streak_days"]
+    if delta == 1:
+        new_streak += 1
+    elif delta == -1:
+        new_streak = 1
+
+    supabase.table("user_stats").update({
+        "xp": new_xp,
+        "level": new_level,
+        "daily_xp": new_daily_xp,
+        "daily_xp_date": today,
+        "streak_days": new_streak,
+        "last_checkin_date": today,
+    }).eq("user_id", user_id).execute()
+
+    return {
+        "ok": True,
+        "xp_gained": gained,
+        "level": new_level,
+        "streak_days": new_streak,
+        "blocked": False,
+    }
