@@ -1,6 +1,6 @@
 # routers/journal.py
 from fastapi import APIRouter, Depends
-from datetime import date
+from datetime import date, datetime, time
 from dependencies.auth import get_current_user
 from db.database import get_supabase
 from schemas.journal import JournalCreate
@@ -16,25 +16,33 @@ def create_journal(
     supabase = get_supabase()
     user_id = current_user["user_id"]
     today = date.today()
+    start = datetime.combine(today, time.min).isoformat()
+    end = datetime.combine(today, time.max).isoformat()
 
     # 🔒 하루 1회 체크
     exists = (
         supabase.table("journals")
         .select("id")
         .eq("user_id", user_id)
-        .gte("created_at", today.isoformat())
+        .gte("created_at", start)
+        .lte("created_at", end)
         .limit(1)
         .execute()
     )
 
     if exists.data:
-        return {"ok": True, "xp_gained": 0, "blocked": True}
+        return {"ok": False, "xp_gained": 0, "blocked": True}
 
     # 1) journal 저장
     supabase.table("journals").insert({
         "user_id": user_id,
         "content": body.content,
+        "created_at": datetime.utcnow().isoformat(),
     }).execute()
+    return {
+        "ok": True,
+        "blocked": False,
+    }
 
     # 2) stats 업데이트 (+10 XP)
     stats_res = (
