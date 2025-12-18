@@ -1,6 +1,6 @@
 from datetime import date
 
-DAILY_XP_CAP = 150
+DAILY_XP_CAP = 20
 LEVEL_CUTOFFS = [0,100,200,300,400,500,600,700,800,900]
 
 
