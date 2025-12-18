@@ -104,6 +104,37 @@ def increment_xp(
             "started_at": datetime.utcnow().isoformat(),
         }).execute()
 
+    # ── SOURCE별 하루 1회 가드 (journal / mood) ──
+        if source in ["journal", "mood"]:
+            dup = (
+                supabase.table("xp_logs")
+                .select("id")
+                .eq("user_id", user_id)
+                .eq("source", source)
+                .gte("created_at", start)
+                .lte("created_at", end)
+                .limit(1)
+                .execute()
+            )
+
+            if dup.data:
+                return {
+                    "gained_xp": 0,
+                    "total_xp": row["xp"],
+                    "level": row["level"],
+                    "daily_xp": row["daily_xp"],
+                    "streak_days": row["streak_days"],
+                    "blocked": True,
+                }
+
+            supabase.table("xp_logs").insert({
+                "user_id": user_id,
+                "source": source,
+                "amount": gained,
+                "created_at": datetime.utcnow().isoformat(),
+            }).execute()
+
+
     # ── STATS 계산 ──────────────────────────────
     res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
     row = res.data[0]
