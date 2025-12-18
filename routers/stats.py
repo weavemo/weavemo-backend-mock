@@ -87,16 +87,8 @@ def increment_xp(
             .limit(1)
             .execute()
         )
-
         if dup.data:
-            return {
-                "gained_xp": 0,
-                "total_xp": None,
-                "level": None,
-                "daily_xp": None,
-                "streak_days": None,
-                "blocked": True,
-            }
+            return {"gained_xp": 0, "blocked": True}
 
         supabase.table("action_logs").insert({
             "user_id": user_id,
@@ -105,35 +97,19 @@ def increment_xp(
         }).execute()
 
     # ── SOURCE별 하루 1회 가드 (journal / mood) ──
-        if source in ["journal", "mood"]:
-            dup = (
-                supabase.table("xp_logs")
-                .select("id")
-                .eq("user_id", user_id)
-                .eq("source", source)
-                .gte("created_at", start)
-                .lte("created_at", end)
-                .limit(1)
-                .execute()
-            )
-
-            if dup.data:
-                return {
-                    "gained_xp": 0,
-                    "total_xp": row["xp"],
-                    "level": row["level"],
-                    "daily_xp": row["daily_xp"],
-                    "streak_days": row["streak_days"],
-                    "blocked": True,
-                }
-
-            supabase.table("xp_logs").insert({
-                "user_id": user_id,
-                "source": source,
-                "amount": gained,
-                "created_at": datetime.utcnow().isoformat(),
-            }).execute()
-
+    if source in ["journal", "mood"]:
+        dup = (
+            supabase.table("xp_logs")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("source", source)
+            .gte("created_at", start)
+            .lte("created_at", end)
+            .limit(1)
+            .execute()
+        )
+        if dup.data:
+            return {"gained_xp": 0, "blocked": True}
 
     # ── STATS 계산 ──────────────────────────────
     res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
@@ -145,7 +121,6 @@ def increment_xp(
 
     new_daily_xp, gained = apply_daily_xp(daily_xp, amount)
 
-    # ✅ 핵심: cap 초과 시 xp 증가 금지
     if gained == 0:
         new_xp = row["xp"]
     else:
@@ -169,6 +144,15 @@ def increment_xp(
         "last_checkin_date": today_str,
         "updated_at": "now()",
     }).eq("user_id", user_id).execute()
+
+    # ── XP 로그 기록 (지급됐을 때만) ────────────
+    if gained > 0 and source in ["journal", "mood"]:
+        supabase.table("xp_logs").insert({
+            "user_id": user_id,
+            "source": source,
+            "amount": gained,
+            "created_at": datetime.utcnow().isoformat(),
+        }).execute()
 
     return {
         "gained_xp": gained,
