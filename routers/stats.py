@@ -70,6 +70,8 @@ def increment_xp(
     supabase = get_supabase()
     user_id = current_user["user_id"]
     source = source.lower()
+    if source == "journals":
+        source = "journal"
 
     today = date.today()
     today_str = today.isoformat()
