@@ -97,7 +97,7 @@ def increment_xp(
         }).execute()
 
     # ── SOURCE별 하루 1회 가드 (journal / mood) ──
-    if source in ["journal", "mood"]:
+    if source in ["journal", "journals","mood"]:
         dup = (
             supabase.table("xp_logs")
             .select("id")
