@@ -1,7 +1,7 @@
 # /routers/stats.py
 
 from fastapi import APIRouter, Depends, Query
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone   # ⬅ timezone만 추가
 
 from dependencies.auth import get_current_user
 from db.database import get_supabase
@@ -80,14 +80,36 @@ def increment_xp(
     res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
     row = res.data[0]
 
-    # ── SOURCE별 하루 1회 가드 (핵심) ──────────
+    # ── ACTION 하루 1회 가드 (추가된 유일한 로직) ──────────
+    if source == "action":
+        if action_id is None:
+            return {"gained_xp": 0, "blocked": True}
+
+        start = datetime.combine(today, time.min).replace(tzinfo=timezone.utc).isoformat()
+        end = datetime.combine(today, time.max).replace(tzinfo=timezone.utc).isoformat()
+
+        existing = (
+            supabase.table("action_logs")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("action_id", action_id)
+            .gte("started_at", start)
+            .lte("started_at", end)
+            .limit(1)
+            .execute()
+        )
+
+        if existing.data:
+            return {"gained_xp": 0, "blocked": True}
+
+    # ── SOURCE별 하루 1회 가드 (기존 그대로) ──────────
     if source == "mood" and row.get("daily_mood_xp_date") == today_str:
         return {"gained_xp": 0, "blocked": True}
 
     if source in ["journal", "journals"] and row.get("daily_journal_xp_date") == today_str:
         return {"gained_xp": 0, "blocked": True}
 
-    # ── DAILY XP CAP ──────────────────────────
+    # ── DAILY XP CAP (기존 그대로) ─────────────────
     daily_xp = row["daily_xp"] if row["daily_xp_date"] == today_str else 0
     new_daily_xp, gained = apply_daily_xp(daily_xp, amount)
 
@@ -97,7 +119,7 @@ def increment_xp(
     new_xp = row["xp"] + gained
     new_level = calculate_level(new_xp)
 
-    # ── STREAK ───────────────────────────────
+    # ── STREAK (기존 그대로) ─────────────────────
     delta = calc_streak(row["last_checkin_date"], today)
     new_streak = row["streak_days"]
     if delta == 1:
@@ -123,6 +145,14 @@ def increment_xp(
 
     supabase.table("user_stats").update(update_data).eq("user_id", user_id).execute()
 
+    # ── ACTION 완료 기록 (추가된 유일한 insert) ──────────
+    if source == "action":
+        supabase.table("action_logs").insert({
+            "user_id": user_id,
+            "action_id": action_id,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+
     return {
         "gained_xp": gained,
         "total_xp": new_xp,
@@ -131,4 +161,3 @@ def increment_xp(
         "daily_xp": new_daily_xp,
         "blocked": False,
     }
-
