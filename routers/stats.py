@@ -69,75 +69,33 @@ def increment_xp(
 ):
     supabase = get_supabase()
     user_id = current_user["user_id"]
+    source = source.lower()
 
     today = date.today()
     today_str = today.isoformat()
-    start = datetime.combine(today, time.min).isoformat()
-    end = datetime.combine(today, time.max).isoformat()
 
     # ── user_stats 조회 ────────────────────────
     res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
     row = res.data[0]
 
-    # ── ACTION 중복 가드 (기존 유지) ───────────
-    if source == "action" and action_id:
-        dup = (
-            supabase.table("action_logs")
-            .select("id")
-            .eq("user_id", user_id)
-            .eq("action_id", action_id)
-            .gte("started_at", start)
-            .lte("started_at", end)
-            .limit(1)
-            .execute()
-        )
-        if dup.data:
-            return {"gained_xp": 0, "blocked": True}
+    # ── SOURCE별 하루 1회 가드 (핵심) ──────────
+    if source == "mood" and row.get("daily_mood_xp_date") == today_str:
+        return {"gained_xp": 0, "blocked": True}
 
-        supabase.table("action_logs").insert({
-            "user_id": user_id,
-            "action_id": action_id,
-            "started_at": datetime.utcnow().isoformat(),
-        }).execute()
+    if source in ["journal", "journals"] and row.get("daily_journal_xp_date") == today_str:
+        return {"gained_xp": 0, "blocked": True}
 
-    # ── JOURNAL 하루 1회 가드 ─────────────────
-    if source in ["journal","journals"]:
-        dup = (
-            supabase.table("journals")
-            .select("id")
-            .eq("user_id", user_id)
-            .gte("created_at", start)
-            .lte("created_at", end)
-            .limit(1)
-            .execute()
-        )
-        if dup.data:
-            return {"gained_xp": 0, "blocked": True}
-
-    # ── MOOD 하루 1회 가드 ────────────────────
-    if source == "mood":
-        dup = (
-            supabase.table("moods")
-            .select("id")
-            .eq("user_id", user_id)
-            .eq("date", today_str)
-            .limit(1)
-            .execute()
-        )
-        if dup.data:
-            return {"gained_xp": 0, "blocked": True}
-
-    # ── DAILY XP CAP 계산 ─────────────────────
-    daily_xp = row["daily_xp"]
-    if row["daily_xp_date"] != today_str:
-        daily_xp = 0
-
+    # ── DAILY XP CAP ──────────────────────────
+    daily_xp = row["daily_xp"] if row["daily_xp_date"] == today_str else 0
     new_daily_xp, gained = apply_daily_xp(daily_xp, amount)
 
-    new_xp = row["xp"] + gained if gained > 0 else row["xp"]
+    if gained == 0:
+        return {"gained_xp": 0, "blocked": True}
+
+    new_xp = row["xp"] + gained
     new_level = calculate_level(new_xp)
 
-    # ── STREAK 계산 ───────────────────────────
+    # ── STREAK ───────────────────────────────
     delta = calc_streak(row["last_checkin_date"], today)
     new_streak = row["streak_days"]
     if delta == 1:
@@ -145,8 +103,7 @@ def increment_xp(
     elif delta == -1:
         new_streak = 1
 
-    # ── UPDATE ───────────────────────────────
-    supabase.table("user_stats").update({
+    update_data = {
         "xp": new_xp,
         "level": new_level,
         "daily_xp": new_daily_xp,
@@ -154,7 +111,15 @@ def increment_xp(
         "streak_days": new_streak,
         "last_checkin_date": today_str,
         "updated_at": "now()",
-    }).eq("user_id", user_id).execute()
+    }
+
+    if source == "mood":
+        update_data["daily_mood_xp_date"] = today_str
+
+    if source == "journal":
+        update_data["daily_journal_xp_date"] = today_str
+
+    supabase.table("user_stats").update(update_data).eq("user_id", user_id).execute()
 
     return {
         "gained_xp": gained,
@@ -164,3 +129,4 @@ def increment_xp(
         "daily_xp": new_daily_xp,
         "blocked": False,
     }
+
