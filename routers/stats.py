@@ -111,7 +111,7 @@ def increment_xp(
         }).execute()
 
     # ── JOURNAL 하루 1회 가드 ─────────────────
-    if (source == "journal" || source == "journals") and daily_journals > 0:
+    if source in ["journal", "journals"] and daily_journals > 0:
         return {"gained_xp": 0, "blocked": True}
 
     # ── MOOD 하루 1회 가드 ────────────────────
