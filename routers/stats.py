@@ -63,7 +63,7 @@ def get_completed_actions_today(current_user=Depends(get_current_user)):
 @router.post("/xp/increment")
 def increment_xp(
     amount: int = Query(..., gt=0),
-    source: str = Query(...),
+    source: str = Query(...),   # journal | mood | action
     action_id: int | None = Query(None),
     current_user=Depends(get_current_user),
 ):
@@ -75,7 +75,11 @@ def increment_xp(
     start = datetime.combine(today, time.min).isoformat()
     end = datetime.combine(today, time.max).isoformat()
 
-    # ── ACTION 중복 가드 ─────────────────────────
+    # ── STATS 조회 (가장 먼저) ─────────────────
+    res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
+    row = res.data[0]
+
+    # ── ACTION 중복 가드 (기존 유지) ────────────
     if source == "action" and action_id:
         dup = (
             supabase.table("action_logs")
@@ -96,25 +100,17 @@ def increment_xp(
             "started_at": datetime.utcnow().isoformat(),
         }).execute()
 
-    # ── SOURCE별 하루 1회 가드 (journal / mood) ──
-    if source in ["journal", "journals","mood"]:
-        dup = (
-            supabase.table("xp_logs")
-            .select("id")
-            .eq("user_id", user_id)
-            .eq("source", source)
-            .gte("created_at", start)
-            .lte("created_at", end)
-            .limit(1)
-            .execute()
-        )
-        if dup.data:
+    # ── JOURNAL 하루 1회 가드 ──────────────────
+    if source in [ "journal", "journals"]:
+        if row["daily_xp_date"] == today_str and row["total_journals"] > 0:
             return {"gained_xp": 0, "blocked": True}
 
-    # ── STATS 계산 ──────────────────────────────
-    res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
-    row = res.data[0]
+    # ── MOOD 하루 1회 가드 ─────────────────────
+    if source == "mood":
+        if row["daily_xp_date"] == today_str and row["total_moods"] > 0:
+            return {"gained_xp": 0, "blocked": True}
 
+    # ── DAILY XP 계산 ──────────────────────────
     daily_xp = row["daily_xp"]
     if row["daily_xp_date"] != today_str:
         daily_xp = 0
@@ -128,6 +124,7 @@ def increment_xp(
 
     new_level = calculate_level(new_xp)
 
+    # ── STREAK 계산 ────────────────────────────
     delta = calc_streak(row["last_checkin_date"], today)
     new_streak = row["streak_days"]
     if delta == 1:
@@ -135,7 +132,8 @@ def increment_xp(
     elif delta == -1:
         new_streak = 1
 
-    supabase.table("user_stats").update({
+    # ── 카운터 증가 (지급 성공 시만) ───────────
+    update_payload = {
         "xp": new_xp,
         "level": new_level,
         "daily_xp": new_daily_xp,
@@ -143,16 +141,17 @@ def increment_xp(
         "streak_days": new_streak,
         "last_checkin_date": today_str,
         "updated_at": "now()",
-    }).eq("user_id", user_id).execute()
+    }
 
-    # ── XP 로그 기록 (지급됐을 때만) ────────────
-    if gained > 0 and source in ["journal", "mood"]:
-        supabase.table("xp_logs").insert({
-            "user_id": user_id,
-            "source": source,
-            "amount": gained,
-            "created_at": datetime.utcnow().isoformat(),
-        }).execute()
+    if gained > 0 and source == "journal":
+        update_payload["total_journals"] = row["total_journals"] + 1
+
+    if gained > 0 and source == "mood":
+        update_payload["total_moods"] = row["total_moods"] + 1
+
+    supabase.table("user_stats").update(update_payload).eq(
+        "user_id", user_id
+    ).execute()
 
     return {
         "gained_xp": gained,
