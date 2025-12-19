@@ -187,3 +187,18 @@ def increment_xp(
         "daily_xp": new_daily_xp,
         "blocked": False,
     }
+
+@router.post("/actions/feedback")
+def save_action_feedback(
+    action_id: int = Query(...),
+    feedback: int = Query(...),  # -1 | 0 | 1
+    current_user=Depends(get_current_user),
+):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+
+    supabase.table("action_logs").update({
+        "feedback": feedback,
+    }).eq("user_id", user_id).eq("action_id", action_id).is_("feedback", None).execute()
+
+    return {"ok": True}
