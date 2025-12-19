@@ -110,8 +110,10 @@ def increment_xp(
             .select("id")
             .eq("user_id", user_id)
             .eq("action_id", action_id)
-            .gte("started_at", start)
-            .lte("started_at", end)
+#            .gte("started_at", start)
+#            .lte("started_at", end)
+            .gte("completed_at", start)
+            .lte("completed_at", end)
             .limit(1)
             .execute()
         )
@@ -163,12 +165,19 @@ def increment_xp(
     supabase.table("user_stats").update(update_data).eq("user_id", user_id).execute()
 
     # ── ACTION 완료 기록 (추가된 유일한 insert) ──────────
+#    if source == "action":
+#        supabase.table("action_logs").insert({
+#            "user_id": user_id,
+#            "action_id": action_id,
+#            "started_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+#        }).execute()
     if source == "action":
-        supabase.table("action_logs").insert({
-            "user_id": user_id,
-            "action_id": action_id,
-            "started_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
-        }).execute()
+       supabase.table("action_logs").insert({
+           "user_id": user_id,
+           "action_id": action_id,
+           # started_at은 DB default(now())
+           "completed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+       }).execute()
 
     return {
         "gained_xp": gained,
