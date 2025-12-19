@@ -1,7 +1,7 @@
 # /routers/stats.py
 
 from fastapi import APIRouter, Depends, Query
-from datetime import date, datetime, time, timezone   # ⬅ timezone만 추가
+from datetime import date, datetime, time, timezone, timedelta
 
 from dependencies.auth import get_current_user
 from db.database import get_supabase
@@ -13,6 +13,27 @@ from services.stats_service import (
 
 router = APIRouter()
 
+def _user_today_range_utc(tz_offset_min: int):
+    """
+    tz_offset_min: user timezone offset in minutes (KST = 540)
+    returns: (today_str, utc_start_iso, utc_end_iso)
+    """
+    offset = timedelta(minutes=tz_offset_min)
+    now_utc = datetime.now(timezone.utc)
+    user_now = now_utc + offset
+    user_today = user_now.date()
+
+    user_start = datetime.combine(user_today, time.min)
+    user_end = datetime.combine(user_today, time.max)
+
+    utc_start = (user_start - offset)
+    utc_end = (user_end - offset)
+
+    return (
+        user_today.isoformat(),
+        utc_start.isoformat(),
+        utc_end.isoformat(),
+    )
 
 @router.get("/profile")
 def get_stats_profile(current_user=Depends(get_current_user)):
@@ -39,13 +60,11 @@ def get_stats_profile(current_user=Depends(get_current_user)):
 
 
 @router.get("/actions/completed/today")
-def get_completed_actions_today(current_user=Depends(get_current_user)):
+def get_completed_actions_today(tz_offset_min: int = Query(0), current_user=Depends(get_current_user),):
     supabase = get_supabase()
     user_id = current_user["user_id"]
 
-    today = date.today()
-    start = datetime.combine(today, time.min).isoformat()
-    end = datetime.combine(today, time.max).isoformat()
+    _, start, end = _user_today_range_utc(tz_offset_min)
 
     res = (
         supabase.table("action_logs")
@@ -65,6 +84,7 @@ def increment_xp(
     amount: int = Query(..., gt=0),
     source: str = Query(...),   # journal | mood | action
     action_id: int | None = Query(None),
+    tz_offset_min: int = Query(0),
     current_user=Depends(get_current_user),
 ):
     supabase = get_supabase()
@@ -73,8 +93,7 @@ def increment_xp(
     if source == "journals":
         source = "journal"
 
-    today = date.today()
-    today_str = today.isoformat()
+    today_str, start, end = _user_today_range_utc(tz_offset_min)
 
     # ── user_stats 조회 ────────────────────────
     res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
@@ -85,9 +104,7 @@ def increment_xp(
         if action_id is None:
             return {"gained_xp": 0, "blocked": True}
 
-        start = datetime.combine(today, time.min).replace(tzinfo=timezone.utc).isoformat()
-        end = datetime.combine(today, time.max).replace(tzinfo=timezone.utc).isoformat()
-
+        # start / end already calculated in user timezone (UTC)
         existing = (
             supabase.table("action_logs")
             .select("id")
@@ -120,7 +137,7 @@ def increment_xp(
     new_level = calculate_level(new_xp)
 
     # ── STREAK (기존 그대로) ─────────────────────
-    delta = calc_streak(row["last_checkin_date"], today)
+    delta = calc_streak(row["last_checkin_date"], date.fromisoformat(today_str))
     new_streak = row["streak_days"]
     if delta == 1:
         new_streak += 1
@@ -150,7 +167,7 @@ def increment_xp(
         supabase.table("action_logs").insert({
             "user_id": user_id,
             "action_id": action_id,
-            "started_at": datetime.now(timezone.utc).isoformat(),
+            "started_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }).execute()
 
     return {
