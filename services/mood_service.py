@@ -64,11 +64,12 @@ def get_mood_analysis(
     # 1️⃣ moods 조회
     moods_res = (
         supabase.table("moods")
-        .select("id, date, main_valence, energy, note, trigger_type")
+        .select("id, date, recorded_at, main_valence, energy, note, trigger_type")
         .eq("user_id", user_id)
         .gte("date", start_date.isoformat())
         .lte("date", end_date.isoformat())
         .order("date", desc=False)
+        .order("recorded_at", desc=False)
         .execute()
     )
 
@@ -95,6 +96,7 @@ def get_mood_analysis(
             date=m["date"],
             mainValence=m["main_valence"],
             energy=m["energy"],
+            recordedAt=m.get("recorded_at"),
         )
         for m in moods
     ]
