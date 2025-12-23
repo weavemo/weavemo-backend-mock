@@ -1,3 +1,5 @@
+# services/stats_service.py
+
 from datetime import date
 
 DAILY_XP_CAP = 150
