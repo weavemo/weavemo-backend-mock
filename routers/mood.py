@@ -37,37 +37,20 @@ def submit_mood(
     now_utc = datetime.now(timezone.utc)
     today = now_utc.date().isoformat()
 
-    # 2️⃣ 오늘 mood 조회
-    existing = (
-        supabase.table("moods")
-        .select("id")
-        .eq("user_id", user_id)
-        .eq("date", today)
-        .limit(1)
-        .execute()
-    )
-    rows = existing.data or []
-    existing_id: Optional[int] = rows[0]["id"] if rows else None
-
-    # 3️⃣ 공통 payload
+    # 2️⃣ 오늘 mood 조회/항상 insert(하루 여러번 기록 허용)
     mood_write: Dict[str, Any] = {
+        "user_id": user_id,
+        "date": today,
+        "recorded_at": now_utc.isoformat(),
         "main_valence": payload.mainValence,
         "energy": payload.energy,
         "trigger_type": payload.triggerType,
         "note": payload.note,
     }
 
-    if existing_id is None:
-        mood_write.update({
-            "user_id": user_id,
-            "date": today,
-            "recorded_at": now_utc.isoformat(),
-        })
-        created = supabase.table("moods").insert(mood_write).execute()
-        mood_id = created.data[0]["id"]
-    else:
-        supabase.table("moods").update(mood_write).eq("id", existing_id).execute()
-        mood_id = existing_id
+    created = supabase.table("moods").insert(mood_write).execute()
+    mood_id = created.data[0]["id"]
+
 
     # 4️⃣ 태그 동기화
     tag_codes: List[str] = payload.tagIds or []
