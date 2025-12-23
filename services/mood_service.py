@@ -126,15 +126,26 @@ def get_mood_analysis(
 
     tag_counts: Dict[str, int] = {}
     for row in tags_res.data or []:
-        tag = row.get("emotion_tags")
-        if not tag:
+        tag_obj = row.get("emotion_tags")
+        if not tag_obj:
             continue
-        code = tag["code"]
-        tag_counts[code] = tag_counts.get(code, 0) + 1
+
+        # supabase join 결과가 dict일 수도, list일 수도 있어서 둘 다 처리
+        if isinstance(tag_obj, list):
+            for t in tag_obj:
+                code = t.get("code") if isinstance(t, dict) else None
+                if not code:
+                    continue
+                tag_counts[code] = tag_counts.get(code, 0) + 1
+        elif isinstance(tag_obj, dict):
+            code = tag_obj.get("code")
+            if not code:
+                continue
+            tag_counts[code] = tag_counts.get(code, 0) + 1
 
     tags_summary = [
         MoodTagSummaryItem(code=code, count=count)
-        for code, count in tag_counts.items()
+        for code, count in sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
     ]
 
     # 5️⃣ todayMood (today range only)
