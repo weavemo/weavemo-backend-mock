@@ -49,6 +49,7 @@ class MoodAnalysisPoint(BaseModel):
     date: str
     mainValence: int
     energy: int
+    recordedAt: Optional[str] = None
 
 
 class MoodTagSummaryItem(BaseModel):
