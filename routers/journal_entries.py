@@ -5,7 +5,7 @@ from dependencies.auth import get_current_user
 from db.database import get_supabase
 from services.stats_service import apply_daily_xp, calculate_level, calc_streak
 
-router = APIRouter(prefix="/journal-entries")
+router = APIRouter()
 
 @router.post("")
 def create_journal_entry(
