@@ -1,6 +1,7 @@
 # routers/journal_entries.py
 from fastapi import APIRouter, Depends, Query
 from datetime import date, datetime
+from datetime import date as date_type
 from dependencies.auth import get_current_user
 from db.database import get_supabase
 from services.stats_service import apply_daily_xp, calculate_level, calc_streak
@@ -69,4 +70,30 @@ def get_by_date(
         .execute()
     )
 
+@router.get("/dates")
+def get_entry_dates(
+    month: str = Query(..., regex=r"^\d{4}-\d{2}$"),
+    current_user=Depends(get_current_user),
+):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+
+    start = f"{month}-01"
+    year, mon = map(int, month.split("-"))
+    if mon == 12:
+        end = f"{year + 1}-01-01"
+    else:
+        end = f"{year}-{mon + 1:02d}-01"
+
+    res = (
+        supabase.table("journal_entries")
+        .select("date")
+        .eq("user_id", user_id)
+        .gte("date", start)
+        .lt("date", end)
+        .execute()
+    )
+
+    dates = sorted({row["date"] for row in res.data})
+    return {"dates": dates}
     return {"items": res.data}
