@@ -39,10 +39,8 @@ def create_journal_entry(
     else:
          new_daily_xp, gained = apply_daily_xp(0, 10)
          new_xp = stats["xp"] + gained if gained > 0 else stats["xp"]
-         new_level = calculate_level(new_xp)    new_daily_xp, gained = apply_daily_xp(daily_xp, 10)
-    new_xp = stats["xp"] + gained if gained > 0 else stats["xp"]
-    new_level = calculate_level(new_xp)
-
+         new_level = calculate_level(new_xp)    
+        
     supabase.table("user_stats").update({
         "xp": new_xp,
         "level": new_level,
