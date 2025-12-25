@@ -1,6 +1,6 @@
 # routers/journal_entries.py
-from fastapi import APIRouter, Depends, Query, Body
-from datetime import date, datetime
+from fastapi import APIRouter, Depends, Query, Body, Header
+from datetime import date, datetime, timedelta
 from datetime import date as date_type
 from dependencies.auth import get_current_user
 from db.database import get_supabase
@@ -13,6 +13,7 @@ def create_journal_entry(
     content: str = Body(...),
     date: date = Body(...),
     type: str = Body(...),
+    tz_offset_min: int = Header(0),
     current_user=Depends(get_current_user),
 ):
     supabase = get_supabase()
@@ -28,7 +29,10 @@ def create_journal_entry(
     }).execute()
 
     # XP 처리 (기존 stats 로직 재사용)
-    today_str = datetime.utcnow().date().isoformat()
+     # ✅ 사용자 로컬 날짜 기준 XP 가드
+    utc_now = datetime.utcnow()
+    local_now = utc_now + timedelta(minutes=tz_offset_min)
+    today_str = local_now.date().isoformat()
     stats = supabase.table("user_stats").select("*").eq("user_id", user_id).execute().data[0]
 
     # 🔒 journal / journal_entries 통합 하루 1회 XP 가드
