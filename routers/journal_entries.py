@@ -28,7 +28,7 @@ def create_journal_entry(
     }).execute()
 
     # XP 처리 (기존 stats 로직 재사용)
-    today_str = date.isoformat()
+    today_str = datetime.utcnow().date().isoformat()
     stats = supabase.table("user_stats").select("*").eq("user_id", user_id).execute().data[0]
 
     # 🔒 journal / journal_entries 통합 하루 1회 XP 가드
