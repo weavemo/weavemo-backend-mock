@@ -1,5 +1,5 @@
 # routers/journal_entries.py
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Body
 from datetime import date, datetime
 from datetime import date as date_type
 from dependencies.auth import get_current_user
@@ -10,9 +10,9 @@ router = APIRouter()
 
 @router.post("")
 def create_journal_entry(
-    content: str,
-    date: date,
-    type: str,
+    content: str = Body(...),
+    date: date = Body(...),
+    type: str = Body(...),
     current_user=Depends(get_current_user),
 ):
     supabase = get_supabase()
