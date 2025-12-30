@@ -73,6 +73,7 @@ def get_by_date(
         .order("created_at", desc=False)
         .execute()
     )
+    return {"items": res.data}
 
 @router.get("/dates")
 def get_entry_dates(
