@@ -18,17 +18,7 @@ from schemas.mood import (
 # -------------------------
 # range → 날짜 범위 계산
 # -------------------------
-def _resolve_date_range(range_key: str) -> tuple[date, date]:
-    today = datetime.now(timezone.utc).date()
 
-    if range_key == "today":
-        return today, today
-    if range_key == "7d":
-        return today - timedelta(days=6), today
-    if range_key == "30d":
-        return today - timedelta(days=29), today
-
-    raise ValueError("Invalid range value")
 
 
 # -------------------------
@@ -58,17 +48,32 @@ def get_mood_analysis(
     supabase,
     user_id: int,
     range_key: str,
+    tz_offset_min: int,
 ) -> MoodAnalysisResponse:
-    start_date, end_date = _resolve_date_range(range_key)
+    utc_now = datetime.utcnow()
+    local_now = utc_now + timedelta(minutes=tz_offset_min)
+    local_today = local_now.date()
+
+    if range_key == "today":
+        start_local = datetime.combine(local_today, datetime.min.time())
+    elif range_key == "7d":
+        start_local = datetime.combine(local_today - timedelta(days=6), datetime.min.time())
+    elif range_key == "30d":
+        start_local = datetime.combine(local_today - timedelta(days=29), datetime.min.time())
+    else:
+        raise ValueError("Invalid range")
+
+    end_local = start_local + timedelta(days=1)
+    start_utc = start_local - timedelta(minutes=tz_offset_min)
+    end_utc = end_local - timedelta(minutes=tz_offset_min)
 
     # 1️⃣ moods 조회
     moods_res = (
         supabase.table("moods")
         .select("id, date, recorded_at, main_valence, energy, note, trigger_type")
         .eq("user_id", user_id)
-        .gte("date", start_date.isoformat())
-        .lte("date", end_date.isoformat())
-        .order("date", desc=False)
+        .gte("recorded_at", start_utc.isoformat())
+        .lte("recorded_at", end_utc.isoformat())
         .order("recorded_at", desc=False)
         .execute()
     )
