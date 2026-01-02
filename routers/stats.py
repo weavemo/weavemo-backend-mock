@@ -13,6 +13,15 @@ from services.stats_service import (
 
 router = APIRouter()
 
+def _get_or_create_user_stats(supabase, user_id: int):
+    res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
+    if not res.data:
+        supabase.table("user_stats").insert({
+            "user_id": user_id,
+        }).execute()
+        res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
+    return res.data[0]
+
 def _user_today_range_utc(tz_offset_min: int):
     """
     tz_offset_min: user timezone offset in minutes (KST = 540)
@@ -40,14 +49,7 @@ def get_stats_profile(current_user=Depends(get_current_user)):
     supabase = get_supabase()
     user_id = current_user["user_id"]
 
-    res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
-    if not res.data:
-        supabase.table("user_stats").insert({
-            "user_id": user_id,
-        }).execute()
-        res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
-
-    row = res.data[0]
+    row = _get_or_create_user_stats(supabase, user_id)
 
     return {
         "level": row["level"],
@@ -96,8 +98,7 @@ def increment_xp(
     today_str, start, end = _user_today_range_utc(tz_offset_min)
 
     # ── user_stats 조회 ────────────────────────
-    res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
-    row = res.data[0]
+    row = _get_or_create_user_stats(supabase, user_id)
 
     # ── ACTION 하루 1회 가드 (추가된 유일한 로직) ──────────
     if source == "action":
