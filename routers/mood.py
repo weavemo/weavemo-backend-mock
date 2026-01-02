@@ -99,7 +99,7 @@ def submit_mood(
 )
 def get_analysis(
     range: str = Query("today", regex="^(today|7d|30d)$"),
-    tz_offset_min: int = Header(0),
+    tz_offset_min: int = Header(0, convert_underscores=False),
     supabase=Depends(get_supabase),
     current_user=Depends(get_current_user),
 ):
