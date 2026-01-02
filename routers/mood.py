@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, status
 
 from db.database import get_supabase
 from dependencies.auth import get_current_user
@@ -99,6 +99,7 @@ def submit_mood(
 )
 def get_analysis(
     range: str = Query("today", regex="^(today|7d|30d)$"),
+    tz_offset_min: int = Header(0),
     supabase=Depends(get_supabase),
     current_user=Depends(get_current_user),
 ):
@@ -115,6 +116,7 @@ def get_analysis(
             supabase=supabase,
             user_id=user_id,
             range_key=range,
+            tz_offset_min=tz_offset_min,
         )
     except ValueError:
         raise HTTPException(
