@@ -103,6 +103,7 @@ def get_analysis(
     supabase=Depends(get_supabase),
     current_user=Depends(get_current_user),
 ):
+    print("🔥 tz_offset_min =", tz_offset_min)
     """
     Week 4:
     - range: today | 7d | 30d
