@@ -28,33 +28,7 @@ def create_journal_entry(
         "created_at": datetime.utcnow().isoformat(),
     }).execute()
 
-    # XP 처리 (기존 stats 로직 재사용)
-     # ✅ 사용자 로컬 날짜 기준 XP 가드
-    utc_now = datetime.utcnow()
-    local_now = utc_now + timedelta(minutes=tz_offset_min)
-    today_str = local_now.date().isoformat()
-    stats = supabase.table("user_stats").select("*").eq("user_id", user_id).execute().data[0]
-
-    # 🔒 journal / journal_entries 통합 하루 1회 XP 가드
-    if stats["daily_journal_xp_date"] == today_str:
-         gained = 0
-         new_xp = stats["xp"]
-         new_level = stats["level"]
-         new_daily_xp = stats["daily_xp"]
-    else:
-         new_daily_xp, gained = apply_daily_xp(0, 10)
-         new_xp = stats["xp"] + gained if gained > 0 else stats["xp"]
-         new_level = calculate_level(new_xp)    
-        
-    supabase.table("user_stats").update({
-        "xp": new_xp,
-        "level": new_level,
-        "daily_xp": new_daily_xp,
-        "daily_journal_xp_date": today_str,
-        "updated_at": "now()",
-    }).eq("user_id", user_id).execute()
-
-    return {"ok": True, "xp_gained": gained, "level": new_level}
+    return {"ok": True}
 
 @router.post("/reflection")
 def create_reflection(
