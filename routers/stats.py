@@ -18,6 +18,11 @@ def _get_or_create_user_stats(supabase, user_id: int):
     if not res.data:
         supabase.table("user_stats").insert({
             "user_id": user_id,
+            "xp": 0,
+            "level": 1,
+            "daily_xp": 0,
+            "daily_xp_date": None,
+            "streak_days": 0,
         }).execute()
         res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
     return res.data[0]
