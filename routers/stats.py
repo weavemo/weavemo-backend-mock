@@ -55,12 +55,15 @@ def get_stats_profile(current_user=Depends(get_current_user)):
     user_id = current_user["user_id"]
 
     row = _get_or_create_user_stats(supabase, user_id)
+    today_str, _, _ = _user_today_range_utc(0)
+
+    daily_xp = row["daily_xp"] if row["daily_xp_date"] == today_str else 0
 
     return {
         "level": row["level"],
         "xp": row["xp"],
         "streak_days": row["streak_days"],
-        "daily_xp": row["daily_xp"],
+        "daily_xp": daily_xp,
         "daily_xp_cap": 150,
         "plan": row["plan"],
     }
