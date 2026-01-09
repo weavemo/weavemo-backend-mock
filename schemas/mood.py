@@ -56,6 +56,15 @@ class MoodTagSummaryItem(BaseModel):
     code: str
     count: int
 
+class MoodAnalysisMetrics(BaseModel):
+    avg_valence: float
+    avg_energy: float
+    valence_trend: str   # up | down | flat
+    energy_trend: str    # up | down | flat
+    energy_volatility: str  # low | medium | high
+    positive_ratio: float
+    dominant_tags: List[str]
+
 
 class TodayMoodInfo(BaseModel):
     moodId: int
@@ -71,4 +80,5 @@ class MoodAnalysisResponse(BaseModel):
     summary: MoodAnalysisSummary
     points: List[MoodAnalysisPoint]
     tagsSummary: List[MoodTagSummaryItem]
+    metrics: MoodAnalysisMetrics
     todayMood: Optional[TodayMoodInfo] = None
