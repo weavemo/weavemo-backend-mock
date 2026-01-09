@@ -14,6 +14,56 @@ from schemas.mood import (
     TodayMoodInfo,
 )
 
+# -------------------------
+# metrics 계산 (Week 9)
+# -------------------------
+def _compute_metrics(points: List[MoodAnalysisPoint], tags_summary: List[MoodTagSummaryItem]) -> Dict[str, Any]:
+    # 평균
+    avg_valence = sum(p.mainValence for p in points) / len(points)
+    avg_energy = sum(p.energy for p in points) / len(points)
+
+    # 단순 추세 (전반 vs 후반 평균)
+    half = len(points) // 2 or 1
+    first_half = points[:half]
+    second_half = points[half:]
+
+    def _trend(first: List[MoodAnalysisPoint], second: List[MoodAnalysisPoint], key: str):
+        f = sum(getattr(p, key) for p in first) / len(first)
+        s = sum(getattr(p, key) for p in second) / len(second)
+        if s > f + 0.2:
+            return "up"
+        if s < f - 0.2:
+            return "down"
+        return "flat"
+
+    valence_trend = _trend(first_half, second_half, "mainValence")
+    energy_trend = _trend(first_half, second_half, "energy")
+
+    # 변동성 (range 기반)
+    energies = [p.energy for p in points]
+    energy_range = max(energies) - min(energies)
+    if energy_range >= 3:
+        energy_volatility = "high"
+    elif energy_range >= 2:
+        energy_volatility = "medium"
+    else:
+        energy_volatility = "low"
+
+    # 분포
+    positive_ratio = len([p for p in points if p.mainValence > 0]) / len(points)
+
+    # 지배 태그
+    dominant_tags = [t.code for t in tags_summary[:2]]
+
+    return {
+        "avg_valence": round(avg_valence, 2),
+        "avg_energy": round(avg_energy, 2),
+        "valence_trend": valence_trend,
+        "energy_trend": energy_trend,
+        "energy_volatility": energy_volatility,
+        "positive_ratio": round(positive_ratio, 2),
+        "dominant_tags": dominant_tags,
+    }
 
 # -------------------------
 # range → 날짜 범위 계산
@@ -167,5 +217,6 @@ def get_mood_analysis(
         summary=summary,
         points=points,
         tagsSummary=tags_summary,
+        metrics=_compute_metrics(points, tags_summary),
         todayMood=today_mood,
     )
