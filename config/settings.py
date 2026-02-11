@@ -1,3 +1,4 @@
+
 from pydantic_settings import BaseSettings
 from pydantic import Field
 
@@ -13,6 +14,10 @@ class Settings(BaseSettings):
     SUPABASE_JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 60
+
+import os
+print("CWD:", os.getcwd())
+print("SUPABASE_URL:", repr(settings.SUPABASE_URL))
 
     
 
