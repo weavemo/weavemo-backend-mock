@@ -20,8 +20,5 @@ class Settings(BaseSettings):
         extra = "forbid"   # 정의 안 된 env 있으면 에러
 
 settings = Settings()
-import os
-print("CWD:", os.getcwd())
-print("SUPABASE_URL:", repr(settings.SUPABASE_URL))
-print("CWD env_file:", __import__("os").getcwd())
+
 
