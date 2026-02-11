@@ -14,17 +14,14 @@ class Settings(BaseSettings):
     SUPABASE_JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 60
-
-import os
-print("CWD:", os.getcwd())
-print("SUPABASE_URL:", repr(settings.SUPABASE_URL))
-
-    
-
+ 
     class Config:
         env_file = ".env"
         extra = "forbid"   # 정의 안 된 env 있으면 에러
 
 settings = Settings()
-print("CWD env_file:", __import__("os").getcwd())
+import os
+print("CWD:", os.getcwd())
 print("SUPABASE_URL:", repr(settings.SUPABASE_URL))
+print("CWD env_file:", __import__("os").getcwd())
+
