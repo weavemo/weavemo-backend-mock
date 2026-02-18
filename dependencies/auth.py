@@ -1,4 +1,4 @@
-# weavemo-backend/dependencies/auth.py
+# weavemo-backend-mock/dependencies/auth.py
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
