@@ -23,4 +23,4 @@ app.include_router(action.router, prefix="/actions", tags=["actions"])
 app.include_router(journal.router, prefix="/journals", tags=["Journal"])
 app.include_router(badge.router, prefix="/badges", tags=["badges"])
 app.include_router(journal_entries.router, prefix="/journal-entries", tags=["JournalEntries"])
-
+app.include_router(weekly_summaries.router, tags=["WeeklySummaries"])
