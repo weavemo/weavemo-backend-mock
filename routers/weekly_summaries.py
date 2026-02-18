@@ -1,4 +1,4 @@
-//weavemo-backend-mock/routers/weekly_summaries.py
+#weavemo-backend-mock/routers/weekly_summaries.py
 
 from fastapi import APIRouter, Depends, Query
 
