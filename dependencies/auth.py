@@ -40,7 +40,7 @@ def get_current_user(
     # 1️⃣ users 테이블에서 auth_uid로 조회
     res = (
         supabase.table("users")
-        .select("id")
+        .select("id, plan")
         .eq("auth_uid", auth_uid)
         .limit(1)
         .execute()
@@ -51,6 +51,7 @@ def get_current_user(
     # 2️⃣ 없으면 자동 생성 (Week 3 기준 허용)
     if rows:
         user_id = rows[0]["id"]
+        plan = rows[0].get("plan")
     else:
         created = (
             supabase.table("users")
@@ -62,10 +63,12 @@ def get_current_user(
             .execute()
         )
         user_id = created.data[0]["id"]
+        plan = "free"
 
     # 3️⃣ 내부 user 객체 반환 (BIGINT id!)
     return {
         "user_id": user_id,   # ✅ DB에서 쓰는 ID
         "auth_uid": auth_uid, # 참고용
         "email": email,
+        "plan": plan,
     }
