@@ -1,7 +1,7 @@
 # main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import auth, user, mood, stats, action, journal, badge, journal_entries
+from routers import auth, user, mood, stats, action, journal, badge, journal_entries, weekly_summaries
 
 
 app = FastAPI()
