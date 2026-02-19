@@ -11,6 +11,7 @@ from schemas.mood import (
     MoodAnalysisPoint,
     MoodTagSummaryItem,
     SummaryLabel,
+    MoodAnalysisMetrics,
     TodayMoodInfo,
 )
 
@@ -146,7 +147,15 @@ def get_mood_analysis(
             ),
             points=[],
             tagsSummary=[],
-            metrics={},
+            metrics=MoodAnalysisMetrics(
+                avg_valence=0.0,
+                avg_energy=0.0,
+                valence_trend="flat",
+                energy_trend="flat",
+                energy_volatility="low",
+                positive_ratio=0.0,
+                dominant_tags=[],
+            ),
             todayMood=None,
         )
 
