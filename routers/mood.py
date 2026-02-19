@@ -116,7 +116,7 @@ def get_analysis(
         return get_mood_analysis(
             supabase=supabase,
             user_id=user_id,
-            range_key=range,
+            range_key=range.strip().lower(),
             tz_offset_min=tz_offset_min,
         )
     except ValueError:
