@@ -117,18 +117,22 @@ def get_mood_analysis(
     start_utc = start_local - timedelta(minutes=tz_offset_min)
     end_utc = end_local - timedelta(minutes=tz_offset_min)
 
-    # 1️⃣ moods 조회
-    moods_res = (
-        supabase.table("moods")
-        .select("id, date, recorded_at, main_valence, energy, note, trigger_type")
-        .eq("user_id", user_id)
-        .gte("recorded_at", start_utc.isoformat())
-        .lte("recorded_at", end_utc.isoformat())
-        .order("recorded_at", desc=False)
-        .execute()
-    )
+    # 1️⃣ moods 조회 (네트워크/Supabase 오류 시에도 화면이 죽지 않게 빈 결과로 폴백)
+    try:
+        moods_res = (
+            supabase.table("moods")
+            .select("id, date, recorded_at, main_valence, energy, note, trigger_type")
+            .eq("user_id", user_id)
+            .gte("recorded_at", start_utc.isoformat())
+            .lte("recorded_at", end_utc.isoformat())
+            .order("recorded_at", desc=False)
+            .execute()
+        )
+    except Exception:
+        moods_res = None
 
-    moods: List[Dict[str, Any]] = moods_res.data or []
+    moods: List[Dict[str, Any]] = (moods_res.data if moods_res and getattr(moods_res, "data", None) else []) or []
+
 
     if not moods:
         # 기록 없는 기간
