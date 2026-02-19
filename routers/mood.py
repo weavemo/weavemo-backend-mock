@@ -113,6 +113,9 @@ def get_analysis(
     user_id: int = current_user["user_id"]
 
     try:
+        print("[mood/analysis] range=", repr(range))
+        print("[mood/analysis] get_mood_analysis file=", get_mood_analysis.__code__.co_filename)
+
         return get_mood_analysis(
             supabase=supabase,
             user_id=user_id,
