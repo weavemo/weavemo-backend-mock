@@ -142,6 +142,7 @@ def get_mood_analysis(
             ),
             points=[],
             tagsSummary=[],
+            metrics=_compute_metrics([],[]),
             todayMood=None,
         )
 
