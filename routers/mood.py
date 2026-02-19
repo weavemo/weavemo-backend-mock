@@ -133,5 +133,5 @@ def get_analysis(
         print("[mood/analysis] Exception:", type(e).__name__, repr(e))
         raise HTTPException(
             status_code=500,
-            detail=f"{type(e).__name__}: {e}}",
+            detail=f"{type(e).__name__}: {e}",
         )
