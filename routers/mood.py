@@ -122,8 +122,16 @@ def get_analysis(
             range_key=range.strip().lower(),
             tz_offset_min=tz_offset_min,
         )
-    except ValueError:
+    except ValueError as e:
+        print("[mood/analysis] ValueError:", repr(e))
         raise HTTPException(
             status_code=400,
             detail="Invalid range value",
+        )
+    except Exception as e:
+        # e.g. httpx.ReadError, network issues, supabase errors
+        print("[mood/analysis] Exception:", type(e).__name__, repr(e))
+        raise HTTPException(
+            status_code=503,
+            detail="Upstream connection error",
         )
