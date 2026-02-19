@@ -132,6 +132,6 @@ def get_analysis(
         # e.g. httpx.ReadError, network issues, supabase errors
         print("[mood/analysis] Exception:", type(e).__name__, repr(e))
         raise HTTPException(
-            status_code=503,
-            detail="Upstream connection error",
+            status_code=500,
+            detail=f"{type(e).__name__}: {e}}",
         )
