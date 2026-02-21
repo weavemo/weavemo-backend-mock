@@ -23,9 +23,7 @@ def get_weekly_summary(
 
     res = (
         supabase.table("weekly_summaries")
-        .select(
-            "week_start, avg_valence, avg_energy, top_emotions, weekday_pattern, summary_text, created_at"
-        )
+        .select("*")
         .eq("user_id", user_id)
         .eq("week_start", week_start)
         .limit(1)
