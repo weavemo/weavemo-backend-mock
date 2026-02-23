@@ -83,19 +83,16 @@ def build_weekly_summary(
 
     weekday_pattern: List[Dict[str, Any]] = []
     for wd in range(7):
-        if wd in by_wd and by_wd[wd]["n"] > 0:
-            agg = by_wd[wd]
-            weekday_pattern.append(
-                {
-                    "day": DAY_NAMES[wd],
-                    "valence": agg["vSum"] / agg["n"],
-                    "energy": agg["eSum"] / agg["n"],
-                }
-            )
-        else:
-            # keep chart stable (optional). If you'd rather omit missing days, remove this.
-            weekday_pattern.append({"day": DAY_NAMES[wd], "valence": 0, "energy": 0})
-
+        if wd not in by_wd or by_wd[wd]["n"] <= 0:
+            continue
+        agg = by_wd[wd]
+        weekday_pattern.append(
+            {
+                "day": DAY_NAMES[wd],
+                "valence": agg["vSum"] / agg["n"],
+                "energy": agg["eSum"] / agg["n"],
+            }
+        )
     # top_emotions (tag counts) — best-effort: only if join tables exist
     top_emotions = None
     try:
@@ -179,7 +176,7 @@ def build_weekly_summary(
         "avg_valence": avg_valence,
         "avg_energy": avg_energy,
         "top_emotions": top_emotions,
-        "weekday_pattern": weekday_pattern,
+        "weekday_pattern": weekday_pattern or None,
         "summary_text": summary_text,
         "journal_days": journal_days,
         "mood_checks": mood_checks,
