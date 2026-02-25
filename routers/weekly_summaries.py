@@ -42,16 +42,14 @@ def get_weekly_summary(
         )
         if not is_empty:
             return row
-        payload = build_weekly_summary(supabase=supabase, user_id=user_id, week_start=week_start)
-        supabase.table("weekly_summaries").upsert(payload, on_conflict="user_id,week_start").execute()
-        res2 = (
-            supabase.table("weekly_summaries")
-            .select("*")
-            .eq("user_id", user_id)
-            .eq("week_start", week_start)
-            .limit(1)
-            .execute()
+        payload = build_weekly_summary(
+            supabase=supabase,
+            user_id=user_id,
+            week_start=week_start,
         )
+        # ✅ unique constraint 없어도 안전하게: id로 update
+        supabase.table("weekly_summaries").insert(payload).execute()
+        res2 = supabase.table("weekly_summaries").select("*").eq("id", row["id"]).limit(1).execute()
         return (res2.data or [payload])[0]
 
     # 없으면 즉시 집계해서 생성 (Week 9: 최소 수정 자동 집계)
