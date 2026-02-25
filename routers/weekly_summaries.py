@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from dependencies.auth import get_current_user
 from db.database import get_supabase
 from services.weekly_summary_service import build_weekly_summary
+from postgrest.exceptions import APIError
 
 router = APIRouter()
 
@@ -48,7 +49,7 @@ def get_weekly_summary(
             week_start=week_start,
         )
         # ✅ unique constraint 없어도 안전하게: id로 update
-        supabase.table("weekly_summaries").insert(payload).execute()
+        supabase.table("weekly_summaries").upsert(payload, on_conflict="user_id,week_start").execute()
         res2 = supabase.table("weekly_summaries").select("*").eq("id", row["id"]).limit(1).execute()
         return (res2.data or [payload])[0]
 
@@ -60,8 +61,15 @@ def get_weekly_summary(
     )
 
     # upsert by (user_id, week_start) — unique constraint가 없다면 insert로만 동작
-    supabase.table("weekly_summaries").upsert(payload, on_conflict="user_id,week_start").execute()
-
+    # ✅ 없으면 생성 (중복이면 upsert로 흡수)
+    try:
+        supabase.table("weekly_summaries").upsert(payload, on_conflict="user_id,week_start").execute()
+    except APIError as e:
+        # 혹시나 race condition 등으로 23505가 나도, 다시 select 해서 반환
+        if getattr(e, "args", None) and isinstance(e.args[0], dict) and e.args[0].get("code") == "23505":
+            pass
+        else:
+            raise
     # 다시 조회해서 DB의 created_at 포함해서 반환
     res2 = (
         supabase.table("weekly_summaries")
