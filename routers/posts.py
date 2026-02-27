@@ -19,7 +19,7 @@ def list_posts(
     supabase=Depends(get_supabase),
 ):
     query = supabase.table("posts").select(
-        "id, category, title, content, created_at, is_anonymous, comment_count, view_count, user_id"
+        "id, user_id, category, title, content, created_at, is_anon, comments_count, likes_count, view_count, visibility"
     )
 
     if category != "all":
@@ -27,14 +27,43 @@ def list_posts(
 
     if sort == "latest":
         query = query.order("created_at", desc=True).order("id", desc=True)
+        if cursor:
+            # cursor = "{created_at}|{id}"
+            try:
+                c_created_at, c_id = cursor.split("|", 1)
+                c_id = int(c_id)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid cursor")
+            # created_at < c_created_at OR (created_at == c_created_at AND id < c_id)
+            query = query.or_(
+                f"created_at.lt.{c_created_at},and(created_at.eq.{c_created_at},id.lt.{c_id})"
+            )    
     elif sort == "popular":
         query = (
-            query.order("comment_count", desc=True)
+            query.order("comments_count", desc=True)
             .order("created_at", desc=True)
             .order("id", desc=True)
         )
+        if cursor:
+            # cursor = "{comments_count}|{created_at}|{id}"
+            try:
+                c_comments, c_created_at, c_id = cursor.split("|", 2)
+                c_comments = int(c_comments)
+                c_id = int(c_id)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid cursor")
+            # comments_count < c_comments
+            # OR (comments_count==c_comments AND created_at < c_created_at)
+            # OR (comments_count==c_comments AND created_at==c_created_at AND id < c_id)
+            query = query.or_(
+                f"comments_count.lt.{c_comments},"
+                f"and(comments_count.eq.{c_comments},created_at.lt.{c_created_at}),"
+                f"and(comments_count.eq.{c_comments},created_at.eq.{c_created_at},id.lt.{c_id})"
+            )
     else:
         raise HTTPException(status_code=400, detail="Invalid sort")
+    # 공개글만 (지금 정책: 읽기 로그인 필수지만 visibility는 public만 노출)
+    query = query.eq("visibility", "public")
 
     query = query.limit(limit)
     res = query.execute()
@@ -43,10 +72,18 @@ def list_posts(
     # 익명 표기 + isMine
     for p in items:
         p["isMine"] = (p.get("user_id") == current_user["user_id"])
-        p["authorDisplayName"] = "익명" if p.get("is_anonymous") else "user"  # TODO: 닉네임 붙이기
-        p["isAnonymous"] = bool(p.get("is_anonymous"))
+        p["authorDisplayName"] = "익명" if p.get("is_anon") else "user"  # TODO: users.nickname 붙이기
+        p["isAnonymous"] = bool(p.get("is_anon"))
+        
+    next_cursor = None
+    if items:
+        last = items[-1]
+        if sort == "latest":
+            next_cursor = f"{last['created_at']}|{last['id']}"
+        else:
+            next_cursor = f"{last['comments_count']}|{last['created_at']}|{last['id']}"
 
-    return {"items": items, "nextCursor": None}
+    return {"items": items, "nextCursor": next_cursor}
 
 
 @router.post("")
@@ -60,9 +97,11 @@ def create_post(
         "category": body.get("category"),
         "title": body.get("title"),
         "content": body.get("content"),
-        "is_anonymous": bool(body.get("isAnonymous", False)),
+        "is_anon": bool(body.get("isAnonymous", False)),
+        "visibility": "public",
         "created_at": datetime.utcnow().isoformat(),
-        "comment_count": 0,
+        "comments_count": 0,
+        "likes_count": 0,
         "view_count": 0,
     }
 
@@ -72,8 +111,8 @@ def create_post(
         raise HTTPException(status_code=500, detail="Insert failed")
 
     row["isMine"] = True
-    row["authorDisplayName"] = "익명" if row.get("is_anonymous") else "user"
-    row["isAnonymous"] = bool(row.get("is_anonymous"))
+    row["authorDisplayName"] = "익명" if row.get("is_anon") else "user"
+    row["isAnonymous"] = bool(row.get("is_anon"))
     return row
 
 
@@ -85,8 +124,8 @@ def get_post_detail(
 ):
     res = (
         supabase.table("posts")
-        .select("id, category, title, content, created_at, is_anonymous, comment_count, view_count, user_id")
-        .eq("id", post_id)
+        .select("id, user_id, category, title, content, created_at, is_anon, comments_count, likes_count, view_count, visibility")
+        .eq("visibility", "public")
         .limit(1)
         .execute()
     )
@@ -98,22 +137,26 @@ def get_post_detail(
 
     # viewCount 옵션2: 유저/게시글/하루 1회만 +1
     today = date.today().isoformat()
-    view_key = f"{current_user['user_id']}_{post_id}_{today}"
-
     view_res = (
         supabase.table("post_views")
         .select("id")
-        .eq("view_key", view_key)
+        .eq("user_id", current_user["user_id"])
+        .eq("post_id", post_id)
+        .eq("viewed_on", today)
         .limit(1)
         .execute()
     )
 
     if not (view_res.data or []):
-        supabase.table("post_views").insert({"view_key": view_key}).execute()
-        supabase.table("posts").update({"view_count": (post.get("view_count") or 0) + 1}).eq("id", post_id).execute()
-        post["view_count"] = (post.get("view_count") or 0) + 1
-
+        supabase.table("post_views").insert({
+            "user_id": current_user["user_id"],
+            "post_id": post_id,
+            "viewed_on": today,
+        }).execute()
+        new_vc = (post.get("view_count") or 0) + 1
+        supabase.table("posts").update({"view_count": new_vc}).eq("id", post_id).execute()
+        post["view_count"] = new_vc
     post["isMine"] = (post.get("user_id") == current_user["user_id"])
-    post["authorDisplayName"] = "익명" if post.get("is_anonymous") else "user"
-    post["isAnonymous"] = bool(post.get("is_anonymous"))
+    post["authorDisplayName"] = "익명" if post.get("is_anon") else "user"
+    post["isAnonymous"] = bool(post.get("is_anon"))
     return post
