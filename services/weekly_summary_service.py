@@ -93,36 +93,44 @@ def build_weekly_summary(
                 "energy": agg["eSum"] / agg["n"],
             }
         )
-    # top_emotions (tag counts) — best-effort: only if join tables exist
-    top_emotions = None
+    # top_emotions (tag counts)
+    # ✅ join/embed 형태에 의존하지 않고 tag_id를 직접 카운트 → emotion_tags에서 code 매핑
+    top_emotions = []
     try:
         mood_ids = [m["id"] for m in moods if m.get("id") is not None]
         if mood_ids:
-            tags_res = (
+            joins_res = (
                 supabase.table("mood_emotion_tags")
-                .select("emotion_tags(code)")
+                .select("tag_id")
                 .in_("mood_id", mood_ids)
                 .execute()
             )
-            counts: Dict[str, int] = {}
-            for row in tags_res.data or []:
-                tag_obj = row.get("emotion_tags")
-                if isinstance(tag_obj, list):
-                    for t in tag_obj:
-                        code = t.get("code") if isinstance(t, dict) else None
-                        if code:
-                            counts[code] = counts.get(code, 0) + 1
-                elif isinstance(tag_obj, dict):
-                    code = tag_obj.get("code")
-                    if code:
-                        counts[code] = counts.get(code, 0) + 1
 
-            top_emotions = [
-                {"code": code, "count": cnt}
-                for code, cnt in sorted(counts.items(), key=lambda x: x[1], reverse=True)[:5]
-            ]
+            tag_counts: Dict[int, int] = {}
+            for r in joins_res.data or []:
+                tid = r.get("tag_id")
+                if tid is None:
+                    continue
+                tag_counts[int(tid)] = tag_counts.get(int(tid), 0) + 1
+
+            if tag_counts:
+                tag_ids = list(tag_counts.keys())
+                tags_res = (
+                    supabase.table("emotion_tags")
+                    .select("id, code")
+                    .in_("id", tag_ids)
+                    .execute()
+                )
+                id_to_code = {int(t["id"]): t["code"] for t in (tags_res.data or []) if t.get("id") and t.get("code")}
+
+                top_emotions = [
+                    {"code": id_to_code[tid], "count": cnt}
+                    for tid, cnt in sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
+                    if tid in id_to_code
+                ][:5]
     except Exception:
-        top_emotions = None
+        # best-effort: 실패 시 빈 배열 유지
+        top_emotions = []
 
     mood_checks = len(moods)
 
