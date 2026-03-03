@@ -8,6 +8,17 @@ from db.database import get_supabase
 
 router = APIRouter(prefix="/posts", tags=["comments"])
 
+def _comment_to_dto(c: dict, current_user: dict) -> dict:
+    is_anon = bool(c.get("is_anon"))
+    return {
+        "id": c.get("id"),
+        "postId": c.get("post_id"),
+        "content": c.get("content") or "",
+        "createdAt": c.get("created_at"),
+        "authorDisplayName": "익명" if is_anon else "user",  # TODO: nickname
+        "isAnonymous": is_anon,
+        "isMine": (c.get("user_id") == current_user["user_id"]),
+    }
 
 @router.get("/{post_id}/comments")
 def list_comments(
@@ -36,13 +47,8 @@ def list_comments(
         .execute()
     )
 
-    items = res.data or []
-    for c in items:
-        c["isMine"] = (c.get("user_id") == current_user["user_id"])
-        c["authorDisplayName"] = "익명" if c.get("is_anon") else "user"  # TODO: nickname
-        c["isAnonymous"] = bool(c.get("is_anon"))
-
-    return {"items": items}
+    rows = res.data or []
+    return {"items": [_comment_to_dto(c, current_user) for c in rows]}
 
 
 @router.post("/{post_id}/comments")
@@ -66,7 +72,11 @@ def create_comment(
 
     post = post_res.data[0]
     is_anon = bool(body.get("isAnonymous", False))
+    content = (body.get("content") or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Content required")
 
+    
     # 1) 댓글 insert
     res = (
         supabase.table("comments")
@@ -74,7 +84,7 @@ def create_comment(
             {
                 "post_id": post_id,
                 "user_id": current_user["user_id"],
-                "content": body.get("content"),
+                "content": content,
                 "is_anon": is_anon,
                 "created_at": datetime.utcnow().isoformat(),
             }
@@ -90,7 +100,4 @@ def create_comment(
     new_cc = int(post.get("comments_count") or 0) + 1
     supabase.table("posts").update({"comments_count": new_cc}).eq("id", post_id).execute()
 
-    row["isMine"] = True
-    row["authorDisplayName"] = "익명" if is_anon else "user"
-    row["isAnonymous"] = is_anon
-    return row
+    return _comment_to_dto(row, current_user)
