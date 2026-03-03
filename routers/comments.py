@@ -75,7 +75,8 @@ def create_comment(
     content = (body.get("content") or "").strip()
     if not content:
         raise HTTPException(status_code=400, detail="Content required")
-
+    if len(content) > 500:
+        raise HTTPException(status_code=400, detail="Content too long")
     
     # 1) 댓글 insert
     res = (
