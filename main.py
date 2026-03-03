@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import auth, user, mood, stats, action, journal, badge, journal_entries, weekly_summaries
 from routers.posts import router as posts_router
+from routers.comments import router as comments_router
 
 app = FastAPI()
 
@@ -25,3 +26,4 @@ app.include_router(badge.router, prefix="/badges", tags=["badges"])
 app.include_router(journal_entries.router, prefix="/journal-entries", tags=["JournalEntries"])
 app.include_router(weekly_summaries.router, tags=["WeeklySummaries"])
 app.include_router(posts_router)
+app.include_router(comments_router)
