@@ -8,6 +8,39 @@ from db.database import get_supabase
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
+ALLOWED_CATEGORIES = {"share", "question", "thanks"}
+
+
+def _preview(text: str | None, n: int = 120) -> str:
+    if not text:
+        return ""
+    t = text.strip()
+    return t if len(t) <= n else t[:n] + "…"
+
+
+def _post_to_dto(p: dict, current_user: dict, *, include_content: bool) -> dict:
+    is_anon = bool(p.get("is_anon"))
+    is_mine = (p.get("user_id") == current_user["user_id"])
+
+    dto = {
+        "id": p.get("id"),
+        "category": p.get("category"),
+        "title": p.get("title"),
+        "createdAt": p.get("created_at"),
+        "authorDisplayName": "익명" if is_anon else "user",  # TODO: nickname
+        "isAnonymous": is_anon,
+        "isMine": is_mine,
+        "commentCount": p.get("comments_count", 0),
+        "likesCount": p.get("likes_count", 0),
+        "viewCount": p.get("view_count", 0),
+    }
+
+    if include_content:
+        dto["content"] = p.get("content") or ""
+    else:
+        dto["contentPreview"] = _preview(p.get("content"))
+
+    return dto
 
 @router.get("")
 def list_posts(
@@ -18,6 +51,12 @@ def list_posts(
     current_user=Depends(get_current_user),  # 로그인 필수
     supabase=Depends(get_supabase),
 ):
+    if limit < 1 or limit > 50:
+        raise HTTPException(status_code=400, detail="Invalid limit")
+
+    if category != "all" and category not in ALLOWED_CATEGORIES:
+        raise HTTPException(status_code=400, detail="Invalid category")
+
     query = supabase.table("posts").select(
         "id, user_id, category, title, content, created_at, is_anon, comments_count, likes_count, view_count, visibility"
     )
@@ -67,17 +106,13 @@ def list_posts(
 
     query = query.limit(limit)
     res = query.execute()
-    items = res.data or []
+    rows = res.data or []
 
-    # 익명 표기 + isMine
-    for p in items:
-        p["isMine"] = (p.get("user_id") == current_user["user_id"])
-        p["authorDisplayName"] = "익명" if p.get("is_anon") else "user"  # TODO: users.nickname 붙이기
-        p["isAnonymous"] = bool(p.get("is_anon"))
-        
+    items = [_post_to_dto(p, current_user, include_content=False) for p in rows]
+
     next_cursor = None
-    if items:
-        last = items[-1]
+    if rows:
+        last = rows[-1]
         if sort == "latest":
             next_cursor = f"{last['created_at']}|{last['id']}"
         else:
@@ -92,11 +127,19 @@ def create_post(
     current_user=Depends(require_premium),  # 프리미엄만
     supabase=Depends(get_supabase),
 ):
+    category = body.get("category")
+    if category not in ALLOWED_CATEGORIES:
+        raise HTTPException(status_code=400, detail="Invalid category")
+    title = (body.get("title") or "").strip()
+    content = (body.get("content") or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Content required")
+
     data = {
         "user_id": current_user["user_id"],
-        "category": body.get("category"),
-        "title": body.get("title"),
-        "content": body.get("content"),
+        "category": category,
+        "title": title,
+        "content": content,
         "is_anon": bool(body.get("isAnonymous", False)),
         "visibility": "public",
         "created_at": datetime.utcnow().isoformat(),
@@ -110,10 +153,7 @@ def create_post(
     if not row:
         raise HTTPException(status_code=500, detail="Insert failed")
 
-    row["isMine"] = True
-    row["authorDisplayName"] = "익명" if row.get("is_anon") else "user"
-    row["isAnonymous"] = bool(row.get("is_anon"))
-    return row
+    return _post_to_dto(row, current_user, include_content=True)
 
 
 @router.get("/{post_id}")
@@ -156,7 +196,4 @@ def get_post_detail(
         new_vc = (post.get("view_count") or 0) + 1
         supabase.table("posts").update({"view_count": new_vc}).eq("id", post_id).execute()
         post["view_count"] = new_vc
-    post["isMine"] = (post.get("user_id") == current_user["user_id"])
-    post["authorDisplayName"] = "익명" if post.get("is_anon") else "user"
-    post["isAnonymous"] = bool(post.get("is_anon"))
-    return post
+    return _post_to_dto(post, current_user, include_content=True)
