@@ -134,7 +134,11 @@ def create_post(
     content = (body.get("content") or "").strip()
     if not content:
         raise HTTPException(status_code=400, detail="Content required")
-
+    if len(title) > 80:
+        raise HTTPException(status_code=400, detail="Title too long")
+    if len(content) > 2000:
+        raise HTTPException(status_code=400, detail="Content too long") 
+    
     data = {
         "user_id": current_user["user_id"],
         "category": category,
