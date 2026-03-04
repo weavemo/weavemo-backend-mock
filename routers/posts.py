@@ -33,6 +33,7 @@ def _post_to_dto(p: dict, current_user: dict, *, include_content: bool) -> dict:
         "commentCount": p.get("comments_count", 0),
         "likesCount": p.get("likes_count", 0),
         "viewCount": p.get("view_count", 0),
+        "isLiked": bool(p.get("_is_liked", False)),
     }
 
     if include_content:
@@ -108,10 +109,25 @@ def list_posts(
     res = query.execute()
     rows = res.data or []
 
-    items = [_post_to_dto(p, current_user, include_content=False) for p in rows]
+    # isLiked 배치 조회
+    post_ids = [r["id"] for r in rows if r.get("id") is not None]
+    liked_ids: set[int] = set()
+    if post_ids:
+        like_res = (
+            supabase.table("post_likes")
+            .select("post_id")
+            .eq("user_id", current_user["user_id"])
+            .in_("post_id", post_ids)
+            .execute()
+        )
+        liked_ids = {x["post_id"] for x in (like_res.data or []) if x.get("post_id") is not None}
 
+    for r in rows:
+        r["_is_liked"] = (r.get("id") in liked_ids)
+
+    items = [_post_to_dto(p, current_user, include_content=False) for p in rows]
     next_cursor = None
-    if rows:
+   if rows:
         last = rows[-1]
         if sort == "latest":
             next_cursor = f"{last['created_at']}|{last['id']}"
@@ -200,4 +216,118 @@ def get_post_detail(
         new_vc = (post.get("view_count") or 0) + 1
         supabase.table("posts").update({"view_count": new_vc}).eq("id", post_id).execute()
         post["view_count"] = new_vc
+    # isLiked 단건 조회
+    like_res = (
+        supabase.table("post_likes")
+        .select("id")
+        .eq("user_id", current_user["user_id"])
+        .eq("post_id", post_id)
+        .limit(1)
+        .execute()
+    )
+    post["_is_liked"] = bool(like_res.data or [])
+
     return _post_to_dto(post, current_user, include_content=True)
+# 🔹 POST /posts/{id}/like  (로그인만)
+@router.post("/{post_id}/like")
+def like_post(
+    post_id: int,
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    # 공개글만
+    post_res = (
+        supabase.table("posts")
+        .select("id, likes_count, visibility")
+        .eq("id", post_id)
+        .eq("visibility", "public")
+        .limit(1)
+        .execute()
+    )
+    if not (post_res.data or []):
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    # 이미 좋아요면 멱등
+    exist = (
+        supabase.table("post_likes")
+        .select("id")
+        .eq("user_id", current_user["user_id"])
+        .eq("post_id", post_id)
+        .limit(1)
+        .execute()
+    )
+    if exist.data:
+        return {"liked": True}
+
+    supabase.table("post_likes").insert(
+        {"user_id": current_user["user_id"], "post_id": post_id}
+    ).execute()
+
+    new_lc = int(post_res.data[0].get("likes_count") or 0) + 1
+    supabase.table("posts").update({"likes_count": new_lc}).eq("id", post_id).execute()
+    return {"liked": True, "likesCount": new_lc}
+
+
+# 🔹 DELETE /posts/{id}/like  (로그인만)
+@router.delete("/{post_id}/like")
+def unlike_post(
+    post_id: int,
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    post_res = (
+        supabase.table("posts")
+        .select("id, likes_count, visibility")
+        .eq("id", post_id)
+        .eq("visibility", "public")
+        .limit(1)
+        .execute()
+    )
+    if not (post_res.data or []):
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    del_res = (
+        supabase.table("post_likes")
+        .delete()
+        .eq("user_id", current_user["user_id"])
+        .eq("post_id", post_id)
+        .execute()
+    )
+    # 지운 게 없으면 멱등
+    if not (del_res.data or []):
+        return {"liked": False}
+
+    new_lc = max(0, int(post_res.data[0].get("likes_count") or 0) - 1)
+    supabase.table("posts").update({"likes_count": new_lc}).eq("id", post_id).execute()
+    return {"liked": False, "likesCount": new_lc}
+
+
+# 🔹 DELETE /posts/{id}  (작성자만) - 안전하게 soft delete
+@router.delete("/{post_id}")
+def delete_post(
+    post_id: int,
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    post_res = (
+        supabase.table("posts")
+        .select("id, user_id, visibility")
+        .eq("id", post_id)
+        .limit(1)
+        .execute()
+    )
+    if not (post_res.data or []):
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    post = post_res.data[0]
+    if post.get("user_id") != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    if post.get("visibility") != "public":
+        return {"deleted": True}
+
+    supabase.table("posts").update(
+        {"visibility": "deleted", "title": "(deleted)", "content": "[deleted]"}
+    ).eq("id", post_id).execute()
+
+    return {"deleted": True}
