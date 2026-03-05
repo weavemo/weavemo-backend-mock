@@ -2,6 +2,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
+from httpx import ReadError
 
 from config.settings import settings
 from db.database import get_supabase
@@ -38,13 +39,19 @@ def get_current_user(
         )
 
     # 1️⃣ users 테이블에서 auth_uid로 조회
-    res = (
-        supabase.table("users")
-        .select("id, plan")
-        .eq("auth_uid", auth_uid)
-        .limit(1)
-        .execute()
-    )
+   try:
+        res = (
+            supabase.table("users")
+            .select("id, plan")
+            .eq("auth_uid", auth_uid)
+            .limit(1)
+            .execute()
+        )
+    except ReadError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Auth backend temporarily unavailable",
+        )
 
     rows = res.data or []
 
