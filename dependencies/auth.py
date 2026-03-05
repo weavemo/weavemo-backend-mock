@@ -39,7 +39,7 @@ def get_current_user(
         )
 
     # 1️⃣ users 테이블에서 auth_uid로 조회
-   try:
+    try:
         res = (
             supabase.table("users")
             .select("id, plan")
