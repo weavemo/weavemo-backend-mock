@@ -220,7 +220,7 @@ def get_post_detail(
     # isLiked 단건 조회
     like_res = (
         supabase.table("post_likes")
-        .select("id")
+        .select("post_id")
         .eq("user_id", current_user["user_id"])
         .eq("post_id", post_id)
         .limit(1)
@@ -251,7 +251,7 @@ def like_post(
     # 이미 좋아요면 멱등
     exist = (
         supabase.table("post_likes")
-        .select("id")
+        .select("post_id")
         .eq("user_id", current_user["user_id"])
         .eq("post_id", post_id)
         .limit(1)
