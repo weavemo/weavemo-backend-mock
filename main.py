@@ -8,10 +8,15 @@ from routers.comments_actions import router as comments_actions_router
 
 app = FastAPI()
 
+origins = [
+    "http://localhost:5173",
+    "http://www.localhost:5173",
+]
+
 # ⭐ CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],       # 개발 단계에서는 전체 허용 O
+    allow_origins=origins,       # 개발 단계에서는 전체 허용 O
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
