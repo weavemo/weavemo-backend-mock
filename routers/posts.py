@@ -127,7 +127,7 @@ def list_posts(
 
     items = [_post_to_dto(p, current_user, include_content=False) for p in rows]
     next_cursor = None
-   if rows:
+    if rows:
         last = rows[-1]
         if sort == "latest":
             next_cursor = f"{last['created_at']}|{last['id']}"
@@ -185,6 +185,7 @@ def get_post_detail(
     res = (
         supabase.table("posts")
         .select("id, user_id, category, title, content, created_at, is_anon, comments_count, likes_count, view_count, visibility")
+        .eq("id", post_id)
         .eq("visibility", "public")
         .limit(1)
         .execute()
