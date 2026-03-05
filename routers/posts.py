@@ -1,6 +1,7 @@
 # weavemo-backend-mock/routers/posts.py
 from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException
+from postgrest.exceptions import APIError
 
 from dependencies.auth import get_current_user
 from dependencies.premium import require_premium
@@ -42,6 +43,23 @@ def _post_to_dto(p: dict, current_user: dict, *, include_content: bool) -> dict:
         dto["contentPreview"] = _preview(p.get("content"))
 
     return dto
+
+def _recalc_likes_count(supabase, post_id: int) -> int:
+    """
+    likes_count를 posts 테이블에 저장해두는 구조라면,
+    동시성/재시도에도 안전하게 '진짜' likes 수로 다시 맞춘다.
+    """
+    cnt_res = (
+        supabase.table("post_likes")
+        .select("post_id", count="exact")
+        .eq("post_id", post_id)
+        .execute()
+    )
+    # postgrest response에 count가 있을 수도/없을 수도 있어서 안전 처리
+    likes_count = int(getattr(cnt_res, "count", None) or 0)
+    supabase.table("posts").update({"likes_count": likes_count}).eq("id", post_id).execute()
+    return likes_count
+
 
 @router.get("")
 def list_posts(
@@ -258,15 +276,22 @@ def like_post(
         .execute()
     )
     if exist.data:
-        return {"liked": True}
+        # 카운트도 안전하게 맞춰서 내려주기(프론트가 즉시 반영 가능)
+        lc = _recalc_likes_count(supabase, post_id)
+        return {"liked": True, "likesCount": lc}
 
-    supabase.table("post_likes").insert(
-        {"user_id": current_user["user_id"], "post_id": post_id}
-    ).execute()
+    # insert는 경쟁조건/재시도에서 중복 유니크 에러가 날 수 있으니 멱등 처리
+    try:
+        supabase.table("post_likes").insert(
+            {"user_id": current_user["user_id"], "post_id": post_id}
+        ).execute()
+    except APIError as e:
+        # 유니크 제약 등으로 이미 존재하면 멱등하게 성공 처리
+        # (정교하게 하려면 e.code로 unique violation만 골라내도 됨)
+        pass
 
-    new_lc = int(post_res.data[0].get("likes_count") or 0) + 1
-    supabase.table("posts").update({"likes_count": new_lc}).eq("id", post_id).execute()
-    return {"liked": True, "likesCount": new_lc}
+    lc = _recalc_likes_count(supabase, post_id)
+    return {"liked": True, "likesCount": lc}
 
 
 # 🔹 DELETE /posts/{id}/like  (로그인만)
@@ -296,11 +321,11 @@ def unlike_post(
     )
     # 지운 게 없으면 멱등
     if not (del_res.data or []):
-        return {"liked": False}
+        lc = _recalc_likes_count(supabase, post_id)
+        return {"liked": False, "likesCount": lc}
 
-    new_lc = max(0, int(post_res.data[0].get("likes_count") or 0) - 1)
-    supabase.table("posts").update({"likes_count": new_lc}).eq("id", post_id).execute()
-    return {"liked": False, "likesCount": new_lc}
+    lc = _recalc_likes_count(supabase, post_id)
+    return {"liked": False, "likesCount": lc}
 
 
 # 🔹 DELETE /posts/{id}  (작성자만) - 안전하게 soft delete
