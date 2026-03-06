@@ -43,7 +43,8 @@ def _compute_metrics(points: List[MoodAnalysisPoint], tags_summary: List[MoodTag
         if not first or not second:
             return "flat"
         f = sum(getattr(p, key) for p in first) / len(first)
-        s = sum(getattr(p, key) for p in second) / len(second)        if s > f + 0.2:
+        s = sum(getattr(p, key) for p in second) / len(second)
+        if s > f + 0.2:
             return "up"
         if s < f - 0.2:
             return "down"
