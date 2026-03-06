@@ -25,7 +25,7 @@ def _execute_with_retry(builder, tries: int = 2):
             time.sleep(0.15 * (i + 1))
     raise last
 def _comment_to_dto(c: dict, current_user: dict) -> dict:
-   is_anon = bool(c.get("is_anon"))
+    is_anon = bool(c.get("is_anon"))
     return {
         "id": c.get("id"),
         "postId": c.get("post_id"),
