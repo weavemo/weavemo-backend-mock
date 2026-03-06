@@ -19,6 +19,16 @@ from schemas.mood import (
 # metrics 계산 (Week 9)
 # -------------------------
 def _compute_metrics(points: List[MoodAnalysisPoint], tags_summary: List[MoodTagSummaryItem]) -> Dict[str, Any]:
+    if not points:
+        return {
+            "avg_valence": 0.0,
+            "avg_energy": 0.0,
+            "valence_trend": "flat",
+            "energy_trend": "flat",
+            "energy_volatility": "low",
+            "positive_ratio": 0.0,
+            "dominant_tags": [t.code for t in tags_summary[:2]],
+        }
     # 평균
     avg_valence = sum(p.mainValence for p in points) / len(points)
     avg_energy = sum(p.energy for p in points) / len(points)
@@ -29,9 +39,11 @@ def _compute_metrics(points: List[MoodAnalysisPoint], tags_summary: List[MoodTag
     second_half = points[half:]
 
     def _trend(first: List[MoodAnalysisPoint], second: List[MoodAnalysisPoint], key: str):
+        # second가 비면(예: points 1개) 추세는 flat으로 처리
+        if not first or not second:
+            return "flat"
         f = sum(getattr(p, key) for p in first) / len(first)
-        s = sum(getattr(p, key) for p in second) / len(second)
-        if s > f + 0.2:
+        s = sum(getattr(p, key) for p in second) / len(second)        if s > f + 0.2:
             return "up"
         if s < f - 0.2:
             return "down"
@@ -105,6 +117,8 @@ def get_mood_analysis(
     local_now = utc_now + timedelta(minutes=tz_offset_min)
     local_today = local_now.date()
 
+    # ✅ range별 기간: today=오늘 하루, 7d=오늘 포함 7일, 30d=오늘 포함 30일
+    # end_local은 "내일 00:00"으로 고정해야 (7d/30d도) 기간 끝까지 포함됨.
     if range_key == "today":
         start_local = datetime.combine(local_today, datetime.min.time())
     elif range_key == "7d":
@@ -114,7 +128,10 @@ def get_mood_analysis(
     else:
         raise ValueError("Invalid range")
 
-    end_local = start_local + timedelta(days=1)
+   # end_local = datetime.combine(local_today + timedelta(days=1), datetime.min.time())
+    # ✅ end는 항상 "내일 00:00 (local)"로 고정 (range가 달라도 오늘 끝까지 포함)
+    end_local = datetime.combine(local_today + timedelta(days=1), datetime.min.time())
+
     start_utc = start_local - timedelta(minutes=tz_offset_min)
     end_utc = end_local - timedelta(minutes=tz_offset_min)
 
@@ -125,7 +142,9 @@ def get_mood_analysis(
             .select("id, date, recorded_at, main_valence, energy, note, trigger_type")
             .eq("user_id", user_id)
             .gte("recorded_at", start_utc.isoformat())
-            .lte("recorded_at", end_utc.isoformat())
+        #    .lte("recorded_at", end_utc.isoformat())
+            # ✅ 경계 중복/누락 방지: end는 미만(<)이 가장 안전
+            .lt("recorded_at", end_utc.isoformat())
             .order("recorded_at", desc=False)
             .execute()
         )
