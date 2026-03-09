@@ -53,7 +53,8 @@ def _user_today_range_utc(tz_offset_min: int):
 def get_stats_profile(
     tz_offset_min: int = Query(0),
     current_user=Depends(get_current_user),
-):    supabase = get_supabase()
+):    
+    supabase = get_supabase()
     user_id = current_user["user_id"]
 
     row = _get_or_create_user_stats(supabase, user_id)
