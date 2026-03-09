@@ -50,12 +50,14 @@ def _user_today_range_utc(tz_offset_min: int):
     )
 
 @router.get("/profile")
-def get_stats_profile(current_user=Depends(get_current_user)):
-    supabase = get_supabase()
+def get_stats_profile(
+    tz_offset_min: int = Query(0),
+    current_user=Depends(get_current_user),
+):    supabase = get_supabase()
     user_id = current_user["user_id"]
 
     row = _get_or_create_user_stats(supabase, user_id)
-    today_str, _, _ = _user_today_range_utc(0)
+    today_str, _, _ = _user_today_range_utc(tz_offset_min)
 
     daily_xp = row["daily_xp"] if row["daily_xp_date"] == today_str else 0
 
