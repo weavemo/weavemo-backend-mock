@@ -1,4 +1,4 @@
-#routers/badge.py
+# routers/badge.py
 
 from fastapi import APIRouter, Depends
 from datetime import datetime
@@ -15,7 +15,7 @@ def get_my_badges(current_user=Depends(get_current_user)):
 
     res = (
         supabase.table("user_badges")
-        .select("badge_id, earned_at, badges(id, code, name, icon)")
+        .select("badge_id, earned_at, badges(id, code, name)")
         .eq("user_id", user_id)
         .execute()
     )
@@ -28,22 +28,22 @@ def get_my_badges(current_user=Depends(get_current_user)):
 
         items.append({
             "id": str(badge["id"]),
+            "code": badge["code"],
             "name": badge["name"],
-            "icon": badge["icon"],
             "unlocked": True,
         })
 
     return items
 
+
 @router.post("/check")
 def check_badges(
-    source: str,  # action | journal | mood
+    source: str,
     current_user=Depends(get_current_user),
 ):
     supabase = get_supabase()
     user_id = current_user["user_id"]
 
-    # user_stats 조회
     stats_res = (
         supabase.table("user_stats")
         .select("*")
@@ -54,24 +54,18 @@ def check_badges(
 
     earned = []
 
-    # --- RULES (Week5 최소셋) ---
-
-    # 1️⃣ 행동 5회
     if source == "action" and stats["total_actions"] >= 5:
         earned.append("calmdown_rookie")
 
-    # 2️⃣ 일기 5회
     if source == "journal" and stats["total_journals"] >= 5:
         earned.append("journal_starter")
 
-    # 3️⃣ 스트릭 7일
     if stats["streak_days"] >= 7:
         earned.append("streak_7")
 
     if not earned:
         return {"earned": []}
 
-    # badge master 조회
     badges = (
         supabase.table("badges")
         .select("id, code")
@@ -80,7 +74,6 @@ def check_badges(
         .data
     )
 
-    # 이미 받은 뱃지 제거
     owned = (
         supabase.table("user_badges")
         .select("badge_id")
