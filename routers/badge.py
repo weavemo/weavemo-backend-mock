@@ -8,6 +8,33 @@ from db.database import get_supabase
 router = APIRouter()
 
 
+@router.get("")
+def get_my_badges(current_user=Depends(get_current_user)):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+
+    res = (
+        supabase.table("user_badges")
+        .select("badge_id, earned_at, badges(id, code, name, icon)")
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+    items = []
+    for row in res.data or []:
+        badge = row.get("badges")
+        if not badge:
+            continue
+
+        items.append({
+            "id": str(badge["id"]),
+            "name": badge["name"],
+            "icon": badge["icon"],
+            "unlocked": True,
+        })
+
+    return items
+
 @router.post("/check")
 def check_badges(
     source: str,  # action | journal | mood
