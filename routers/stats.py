@@ -23,6 +23,7 @@ def _get_or_create_user_stats(supabase, user_id: int):
             "daily_xp": 0,
             "daily_xp_date": None,
             "streak_days": 0,
+            "plan": "free",
         }).execute()
         res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
     return res.data[0]
@@ -68,7 +69,7 @@ def get_stats_profile(
         "streak_days": row["streak_days"],
         "daily_xp": daily_xp,
         "daily_xp_cap": 150,
-        "plan": row["plan"],
+        "plan": row.get("plan", "free"),
     }
 
 
