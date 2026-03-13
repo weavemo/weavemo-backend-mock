@@ -14,9 +14,28 @@ class FrameUpdateRequest(BaseModel):
 
 @router.get("/me")
 def get_my_profile(current_user=Depends(get_current_user)):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+
+    stats_res = (
+        supabase.table("user_stats")
+        .select("level, xp, equipped_frame")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    stats = stats_res.data[0] if stats_res.data else {}
+
     return {
-        "user": current_user
+        "user": {
+            **current_user,
+            "level": stats.get("level", 1),
+            "xp": stats.get("xp", 0),
+            "equipped_frame": stats.get("equipped_frame"),
+        }
     }
+
 
 
 @router.patch("/frame")
