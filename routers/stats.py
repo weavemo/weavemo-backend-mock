@@ -76,7 +76,7 @@ def get_stats_profile(
 @router.get("/actions/completed/today")
 def get_completed_actions_today(tz_offset_min: int = Query(0), current_user=Depends(get_current_user),):
     supabase = get_supabase()
-    user_id = current_user["user_id"]
+    user_id = current_user.get("user_id") or current_user.get("id")
 
     _, start, end = _user_today_range_utc(tz_offset_min)
 
@@ -84,8 +84,8 @@ def get_completed_actions_today(tz_offset_min: int = Query(0), current_user=Depe
         supabase.table("action_logs")
         .select("action_id")
         .eq("user_id", user_id)
-        .gte("started_at", start)
-        .lte("started_at", end)
+        .gte("completed_at", start)
+        .lte("completed_at", end)
         .execute()
     )
 
