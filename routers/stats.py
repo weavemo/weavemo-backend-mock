@@ -72,9 +72,9 @@ def get_stats_profile(
             "daily_xp_cap": 150,
             "plan": row.get("plan", "free"),
         }
-except Exception:
-    traceback.print_exc()
-    raise
+    except Exception:
+        traceback.print_exc()
+        raise
 
 
 @router.get("/actions/completed/today")
