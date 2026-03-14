@@ -26,7 +26,7 @@ def _get_or_create_user_stats(supabase, user_id: int):
             "plan": "free",
         }).execute()
         res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
-    return res.data[0]
+    return (res.data or [])[0]
 
 def _user_today_range_utc(tz_offset_min: int):
     """
@@ -55,22 +55,26 @@ def get_stats_profile(
     tz_offset_min: int = Query(0),
     current_user=Depends(get_current_user),
 ):    
-    supabase = get_supabase()
-    user_id = current_user["user_id"]
-
-    row = _get_or_create_user_stats(supabase, user_id)
-    today_str, _, _ = _user_today_range_utc(tz_offset_min)
-
-    daily_xp = row["daily_xp"] if row["daily_xp_date"] == today_str else 0
-
-    return {
-        "level": row["level"],
-        "xp": row["xp"],
-        "streak_days": row["streak_days"],
-        "daily_xp": daily_xp,
-        "daily_xp_cap": 150,
-        "plan": row.get("plan", "free"),
-    }
+    try:
+        supabase = get_supabase()
+        user_id = current_user["user_id"]
+    
+        row = _get_or_create_user_stats(supabase, user_id)
+        today_str, _, _ = _user_today_range_utc(tz_offset_min)
+    
+        daily_xp = row["daily_xp"] if row["daily_xp_date"] == today_str else 0
+    
+        return {
+            "level": row["level"],
+            "xp": row["xp"],
+            "streak_days": row["streak_days"],
+            "daily_xp": daily_xp,
+            "daily_xp_cap": 150,
+            "plan": row.get("plan", "free"),
+        }
+except Exception:
+    traceback.print_exc()
+    raise
 
 
 @router.get("/actions/completed/today")
