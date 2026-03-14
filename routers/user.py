@@ -15,7 +15,7 @@ class FrameUpdateRequest(BaseModel):
 @router.get("/me")
 def get_my_profile(current_user=Depends(get_current_user)):
     supabase = get_supabase()
-    user_id = current_user["user_id"]
+    user_id = current_user.get("user_id") or current_user.get("id")
 
     stats_res = (
         supabase.table("user_stats")
