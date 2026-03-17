@@ -37,7 +37,9 @@ def get_gallery(current_user=Depends(get_current_user)):
                 "user_id": user_id,
                 "artwork_id": art["id"],
                 "status": "locked",
-                "total_fragments_count": art["total_fragments"]
+                "collected_fragments_count": 0,
+                "total_fragments_count": art["total_fragments"],
+                "completion_percent": 0
             }).execute().data[0]
 
         # 4. 응답 구성
@@ -206,6 +208,7 @@ def draw_capsule(current_user=Depends(get_current_user)):
         }).eq("id", progress["id"]).execute()
 
     return {
-        "fragment": fragment["code"],
+        "artwork_code": art["code"],
+        "fragment_code": fragment["code"],
         "is_duplicate": is_duplicate
     }
