@@ -202,8 +202,30 @@ def draw_capsule(current_user=Depends(get_current_user)):
         .data
     )
 
-    fragment = random.choice(fragments)
+    # 유저가 가진 fragment 조회
+    owned_rows = (
+        supabase.table("user_zen_fragments")
+        .select("fragment_id")
+        .eq("user_id", user_id)
+        .eq("artwork_id", art["id"])
+        .execute()
+        .data
+    )
 
+    owned_ids = {row["fragment_id"] for row in owned_rows}
+
+    weights = []
+    for f in fragments:
+        base_weight = f.get("drop_weight", 100)
+
+        if f["id"] in owned_ids:
+            # 👉 중복이면 확률 낮춤 (핵심!)
+            weights.append(int(base_weight * 0.3))
+        else:
+            # 👉 신규면 그대로
+            weights.append(base_weight)
+
+    fragment = random.choices(fragments, weights=weights, k=1)[0]
     user_frag_res = (
         supabase.table("user_zen_fragments")
         .select("*")
