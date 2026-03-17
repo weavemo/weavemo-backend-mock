@@ -1,1 +1,6 @@
-
+[
+  { "id": "frame_none",  "type": "frame", "rarity": "white", "level": 1, "name": "None" },
+  { "id": "frame_leaf",  "type": "frame", "rarity": "gray",  "level": 2, "name": "Leaf" },
+  { "id": "frame_calm",  "type": "frame", "rarity": "black", "level": 3, "name": "Calm" },
+  { "id": "frame_gold",  "type": "frame", "rarity": "gold",  "level": 4, "name": "Gold" }
+]
