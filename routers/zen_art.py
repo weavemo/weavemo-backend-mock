@@ -83,12 +83,19 @@ def add_fragment(current_user=Depends(get_current_user)):
         .execute()
 
     if user_frag_res.data:
-        # 이미 있으면 duplicate 증가
+        is_duplicate = True
+    
+        current = user_frag_res.data[0]
+    
+        new_duplicate = current["duplicate_count"] + 1
+        new_dust = (current.get("bonus_dust") or 0) + 10
+    
         supabase.table("user_zen_fragments") \
             .update({
-                "duplicate_count": user_frag_res.data[0]["duplicate_count"] + 1
+                "duplicate_count": new_duplicate,
+                "bonus_dust": new_dust
             }) \
-            .eq("id", user_frag_res.data[0]["id"]) \
+            .eq("id", current["id"]) \
             .execute()
     else:
         # 없으면 새로 획득
