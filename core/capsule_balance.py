@@ -1,10 +1,10 @@
 # core/capsule_balance.py
 
 RARITY_BASE_DUST = {
-    "common": 12,
-    "rare": 20,
-    "epic": 32,
-    "legendary": 50,
+    "white": 10,
+    "gray": 18,
+    "black": 30,
+    "gold": 50,
 }
 
 LEVEL_DUST_MULTIPLIER = {
