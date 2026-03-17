@@ -52,3 +52,71 @@ def get_gallery(current_user=Depends(get_current_user)):
     return {
         "items": result
     }
+
+@router.post("/debug/add-fragment")
+def add_fragment(current_user=Depends(get_current_user)):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+
+    # 1. crane_mist 작품 가져오기
+    art = supabase.table("zen_artworks") \
+        .select("*") \
+        .eq("code", "crane_mist") \
+        .single() \
+        .execute().data
+
+    # 2. fragment 하나 가져오기 (예: 첫 번째)
+    fragment = supabase.table("zen_fragments") \
+        .select("*") \
+        .eq("artwork_id", art["id"]) \
+        .limit(1) \
+        .execute().data[0]
+
+    # 3. 유저 fragment 확인
+    user_frag_res = supabase.table("user_zen_fragments") \
+        .select("*") \
+        .eq("user_id", user_id) \
+        .eq("fragment_id", fragment["id"]) \
+        .execute()
+
+    if user_frag_res.data:
+        # 이미 있으면 duplicate 증가
+        supabase.table("user_zen_fragments") \
+            .update({
+                "duplicate_count": user_frag_res.data[0]["duplicate_count"] + 1
+            }) \
+            .eq("id", user_frag_res.data[0]["id"]) \
+            .execute()
+    else:
+        # 없으면 새로 획득
+        supabase.table("user_zen_fragments").insert({
+            "user_id": user_id,
+            "artwork_id": art["id"],
+            "fragment_id": fragment["id"],
+            "owned": True,
+            "duplicate_count": 0
+        }).execute()
+
+        # progress 증가
+        progress = supabase.table("user_zen_art_progress") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .eq("artwork_id", art["id"]) \
+            .single() \
+            .execute().data
+
+        new_count = progress["collected_fragments_count"] + 1
+        total = progress["total_fragments_count"]
+        percent = (new_count / total) * 100
+
+        supabase.table("user_zen_art_progress") \
+            .update({
+                "collected_fragments_count": new_count,
+                "completion_percent": percent,
+                "status": "in_progress"
+            }) \
+            .eq("id", progress["id"]) \
+            .execute()
+
+    return {"message": "fragment added"}
+
