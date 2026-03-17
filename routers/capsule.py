@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from core.capsule_balance import calculate_duplicate_dust
+from services.capsule_service import roll_capsule_reward
 
 router = APIRouter(prefix="/capsule", tags=["capsule"])
 
