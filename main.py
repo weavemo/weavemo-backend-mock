@@ -1,7 +1,7 @@
 # main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import auth, user, mood, stats, action, journal, badge, journal_entries, weekly_summaries, zen_art, capsule
+from routers import auth, user, mood, stats, action, journal, badge, journal_entries, weekly_summaries, zen_art, capsule, collection
 from routers.posts import router as posts_router
 from routers.comments import router as comments_router
 from routers.comments_actions import router as comments_actions_router
@@ -37,3 +37,4 @@ app.include_router(comments_router)
 app.include_router(comments_actions_router)
 app.include_router(zen_art.router)
 app.include_router(capsule.router)
+app.include_router(collection.router)
