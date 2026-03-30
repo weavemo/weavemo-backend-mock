@@ -15,7 +15,7 @@ def get_weekly_summary(
     week_start: str = Query(None),
     current_user=Depends(get_current_user),
 ):
-    if week_start valueis None:
+    if week_start value is None:
         raise ValueError("Week_start is required") 
     """
     Frontend contract:
