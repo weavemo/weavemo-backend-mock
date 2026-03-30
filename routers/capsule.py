@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from core.capsule_balance import calculate_duplicate_dust
 from services.capsule_service import roll_capsule_reward
+from dependencies.auth import get_current_user  # 🔥 추가
 
 router = APIRouter(prefix="/capsule", tags=["capsule"])
 
@@ -10,6 +11,8 @@ router = APIRouter(prefix="/capsule", tags=["capsule"])
 @router.post("/draw")
 def draw_capsule(current_user=Depends(...)):
     user_id = current_user["user_id"]
+    reward = roll_capsule_reward(user_id)
+    
 
     # 1) 캡슐 차감 / 포인트 차감
     # 2) reward roll
