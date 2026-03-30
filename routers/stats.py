@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, Query
 from datetime import date, datetime, time, timezone, timedelta
+import traceback
 
 from dependencies.auth import get_current_user
 from db.database import get_supabase
@@ -99,12 +100,15 @@ def get_completed_actions_today(tz_offset_min: int = Query(0), current_user=Depe
 
 @router.post("/xp/increment")
 def increment_xp(
-    amount: int = Query(..., gt=0),
-    source: str = Query(...),   # journal | mood | action
+    amount: int = Query(None, gt=0),
+    source: str = Query(None),   # journal | mood | action
     action_id: int | None = Query(None),
     tz_offset_min: int = Query(0),
     current_user=Depends(get_current_user),
 ):
+    if amount is None or source is None:
+        raise ValueError("amount and source are required")
+        
     supabase = get_supabase()
     user_id = current_user["user_id"]
     source = source.lower()
