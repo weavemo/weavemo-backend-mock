@@ -12,9 +12,11 @@ router = APIRouter()
 
 @router.get("/weekly-summaries")
 def get_weekly_summary(
-    week_start: str = Query(...),
+    week_start: str = Query(None),
     current_user=Depends(get_current_user),
 ):
+    if week_start valueis None:
+        raise ValueError("Week_start is required") 
     """
     Frontend contract:
     GET /weekly-summaries?week_start=YYYY-MM-DD
