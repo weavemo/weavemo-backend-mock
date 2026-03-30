@@ -211,10 +211,13 @@ def increment_xp(
 
 @router.post("/actions/feedback")
 def save_action_feedback(
-    action_id: int = Query(...),
-    feedback: int = Query(...),  # -1 | 0 | 1
+    action_id: int = Query(None),
+    feedback: int = Query(None),  # -1 | 0 | 1
     current_user=Depends(get_current_user),
 ):
+    if action_id is None or feedback is None:
+    raise ValueError("action_id and feedback are required")
+    
     supabase = get_supabase()
     user_id = current_user["user_id"]
 
