@@ -1,25 +1,27 @@
 # routers/journal_entries.py
+
 from fastapi import APIRouter, Depends, Query, Body, Header
-from datetime import date, datetime, timedelta
-from datetime import date as date_type
+from datetime import date, datetime
 from dependencies.auth import get_current_user
 from db.database import get_supabase
-from services.stats_service import apply_daily_xp, calculate_level, calc_streak
 
 router = APIRouter()
 
+
 @router.post("")
 def create_journal_entry(
-    content: str = Body(...),
-    date: date = Body(...),
-    type: str = Body(...),
+    content: str = Body(None),
+    date: date = Body(None),
+    type: str = Body(None),
     tz_offset_min: int = Header(0),
     current_user=Depends(get_current_user),
 ):
+    if content is None or date is None or type is None:
+        raise ValueError("content, date, type required")
+
     supabase = get_supabase()
     user_id = current_user["user_id"]
 
-    # insert entry
     supabase.table("journal_entries").insert({
         "user_id": user_id,
         "content": content,
@@ -30,16 +32,19 @@ def create_journal_entry(
 
     return {"ok": True}
 
+
 @router.post("/reflection")
 def create_reflection(
-    content: str = Body(...),
-    week_start: date = Body(...),
+    content: str = Body(None),
+    week_start: date = Body(None),
     current_user=Depends(get_current_user),
 ):
+    if content is None or week_start is None:
+        raise ValueError("content, week_start required")
+
     supabase = get_supabase()
     user_id = current_user["user_id"]
 
-    # 주당 1개 가드
     exists = (
         supabase.table("journal_entries")
         .select("id")
@@ -53,7 +58,6 @@ def create_reflection(
     if exists.data:
         return {"ok": False, "error": "reflection_already_exists"}
 
-    # insert (XP 로직 없음)
     supabase.table("journal_entries").insert({
         "user_id": user_id,
         "content": content,
@@ -64,11 +68,15 @@ def create_reflection(
 
     return {"ok": True}
 
+
 @router.get("/reflection")
 def get_reflection(
-    week_start: date = Query(...),
+    week_start: date = Query(None),
     current_user=Depends(get_current_user),
 ):
+    if week_start is None:
+        raise ValueError("week_start required")
+
     supabase = get_supabase()
     user_id = current_user["user_id"]
 
@@ -87,11 +95,15 @@ def get_reflection(
 
     return {"item": res.data[0]}
 
+
 @router.get("/reflection_weeks")
 def get_reflection_weeks(
-    month: str = Query(..., regex=r"^\d{4}-\d{2}$"),
+    month: str = Query(None),
     current_user=Depends(get_current_user),
 ):
+    if month is None:
+        raise ValueError("month required")
+
     supabase = get_supabase()
     user_id = current_user["user_id"]
 
@@ -117,12 +129,14 @@ def get_reflection_weeks(
     return {"weeks": weeks}
 
 
-
 @router.get("/by-date")
 def get_by_date(
-    date: date = Query(...),
+    date: date = Query(None),
     current_user=Depends(get_current_user),
 ):
+    if date is None:
+        raise ValueError("date required")
+
     supabase = get_supabase()
     user_id = current_user["user_id"]
 
@@ -134,18 +148,24 @@ def get_by_date(
         .order("created_at", desc=False)
         .execute()
     )
+
     return {"items": res.data}
+
 
 @router.get("/dates")
 def get_entry_dates(
-    month: str = Query(..., regex=r"^\d{4}-\d{2}$"),
+    month: str = Query(None),
     current_user=Depends(get_current_user),
 ):
+    if month is None:
+        raise ValueError("month required")
+
     supabase = get_supabase()
     user_id = current_user["user_id"]
 
     start = f"{month}-01"
     year, mon = map(int, month.split("-"))
+
     if mon == 12:
         end = f"{year + 1}-01-01"
     else:
@@ -162,4 +182,3 @@ def get_entry_dates(
 
     dates = sorted({row["date"] for row in res.data})
     return {"dates": dates}
-    return {"items": res.data}
