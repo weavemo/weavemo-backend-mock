@@ -216,7 +216,7 @@ def save_action_feedback(
     current_user=Depends(get_current_user),
 ):
     if action_id is None or feedback is None:
-    raise ValueError("action_id and feedback are required")
+        raise ValueError("action_id and feedback are required")
     
     supabase = get_supabase()
     user_id = current_user["user_id"]
