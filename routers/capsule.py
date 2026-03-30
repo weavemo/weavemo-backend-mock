@@ -9,7 +9,7 @@ router = APIRouter(prefix="/capsule", tags=["capsule"])
 
 
 @router.post("/draw")
-def draw_capsule(current_user=Depends(...)):
+def draw_capsule(current_user=Depends(get_current_user)):
     user_id = current_user["user_id"]
     reward = roll_capsule_reward(user_id)
     
