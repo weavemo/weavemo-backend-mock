@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from dependencies.auth import get_current_user
 from db.database import get_supabase
 
-router = APIRouter(prefix="/comments", tags=["comments"])
+router = APIRouter()
 
 
 @router.delete("/{comment_id}")
