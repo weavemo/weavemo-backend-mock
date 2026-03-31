@@ -5,7 +5,7 @@ from core.capsule_balance import calculate_duplicate_dust
 from services.capsule_service import roll_capsule_reward
 from dependencies.auth import get_current_user  # 🔥 추가
 
-router = APIRouter(prefix="/capsule", tags=["capsule"])
+router = APIRouter()
 
 
 @router.post("/draw")
