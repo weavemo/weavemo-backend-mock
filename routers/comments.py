@@ -9,7 +9,7 @@ from dependencies.auth import get_current_user
 from dependencies.premium import require_premium
 from db.database import get_supabase
 
-router = APIRouter(prefix="/posts", tags=["comments"])
+router = APIRouter()
 
 def _execute_with_retry(builder, tries: int = 2):
     """
