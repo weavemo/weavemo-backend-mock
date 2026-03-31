@@ -5,7 +5,7 @@ from db.database import get_supabase
 from dependencies.auth import get_current_user
 import random
 
-router = APIRouter(prefix="/zen-art", tags=["zen-art"])
+router = APIRouter()
 
 
 @router.get("/gallery")
