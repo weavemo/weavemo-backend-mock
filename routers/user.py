@@ -36,6 +36,26 @@ def get_my_profile(current_user=Depends(get_current_user)):
         }
     }
 
+@router.get("/equipped")
+def get_equipped(current_user=Depends(get_current_user)):
+    supabase = get_supabase()
+    user_id = current_user.get("user_id") or current_user.get("id")
+
+    res = (
+        supabase.table("user_stats")
+        .select("equipped_frame")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    data = res.data[0] if res.data else {}
+
+    return {
+        "frame": data.get("equipped_frame"),
+        "skin": None,   # 나중 확장
+        "badge": None,  # 나중 확장
+    }
 
 
 @router.patch("/frame")
