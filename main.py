@@ -34,7 +34,7 @@ app.include_router(journal_entries.router, prefix="/journal-entries", tags=["Jou
 app.include_router(weekly_summaries.router, tags=["WeeklySummaries"])
 app.include_router(posts_router)
 app.include_router(comments_router, prefix="/posts", tags=["comments"])
-app.include_router(comments_actions_router)
+app.include_router(comments_actions_router, prefix="/comments", tags=["comments"])
 app.include_router(zen_art.router)
 app.include_router(capsule.router, prefix="/capsule", tags=["capsule"])
 app.include_router(collection.router, prefix="/collections", tags=["collections"])
