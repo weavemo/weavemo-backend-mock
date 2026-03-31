@@ -7,7 +7,7 @@ from dependencies.auth import get_current_user
 from dependencies.premium import require_premium
 from db.database import get_supabase
 
-router = APIRouter(prefix="/posts", tags=["posts"])
+router = APIRouter()
 
 ALLOWED_CATEGORIES = {"share", "question", "thanks"}
 
