@@ -8,7 +8,7 @@ from services.collection_service import (
     get_user_behaviors
 )
 
-router = APIRouter(prefix="/collections", tags=["collections"])
+router = APIRouter()
 
 
 @router.post("/complete")
