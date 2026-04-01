@@ -107,14 +107,17 @@ def get_completed_actions_today(tz_offset_min: int = Query(0), current_user=Depe
 
     _, start, end = _user_today_range_utc(tz_offset_min)
 
-    res = (
-        supabase.table("action_logs")
-        .select("action_id")
-        .eq("user_id", user_id)
-        .gte("completed_at", start)
-        .lte("completed_at", end)
-        .execute()
-    )
+    try:
+        res = (
+            supabase.table("action_logs")
+            .select("action_id")
+            .eq("user_id", user_id)
+            .gte("completed_at", start)
+            .lte("completed_at", end)
+            .execute()
+        )
+    except Exception:
+        return {"actions":[]}
 
     actions = [r["action_id"] for r in res.data] if res.data else []
     return {"actions": actions}
