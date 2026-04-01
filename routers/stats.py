@@ -15,7 +15,19 @@ from services.stats_service import (
 router = APIRouter()
 
 def _get_or_create_user_stats(supabase, user_id: int):
-    res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
+    try:
+        res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
+    except Exception:
+        # 🔥 fallback (절대 터지지 않게)
+        return {
+            "user_id": user_id,
+            "xp": 0,
+            "level": 1,
+            "daily_xp": 0,
+            "daily_xp_date": None,
+            "streak_days": 0,
+            "plan": "free",
+        }
     if not res.data:
         supabase.table("user_stats").insert({
             "user_id": user_id,
@@ -60,7 +72,17 @@ def get_stats_profile(
         supabase = get_supabase()
         user_id = current_user["user_id"]
     
-        row = _get_or_create_user_stats(supabase, user_id)
+        try:
+            row = _get_or_create_user_stats(supabase, user_id)
+        except Exception:
+            row = {
+                "xp": 0,
+                "level": 1,
+                "streak_days": 0,
+                "daily_xp": 0,
+                "daily_xp_date": None,
+                "plan": "free",
+            }
         today_str, _, _ = _user_today_range_utc(tz_offset_min)
     
         daily_xp = row["daily_xp"] if row["daily_xp_date"] == today_str else 0
