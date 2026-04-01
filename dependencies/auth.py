@@ -47,10 +47,11 @@ def get_current_user(
             .limit(1)
             .execute()
         )
-    except ReadError:
+    except Exception as e:
+        print("🔥 supabase error:", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Auth backend temporarily unavailable",
+            detail="Auth backend error",
         )
 
     rows = res.data or []
@@ -60,15 +61,22 @@ def get_current_user(
         user_id = rows[0]["id"]
         plan = rows[0].get("plan")
     else:
-        created = (
-            supabase.table("users")
-            .insert({
-                "auth_uid": auth_uid,
-                "email": email,
-                "nickname": email.split("@")[0] if email else "user",
-            })
-            .execute()
-        )
+        try:
+            created = (
+                supabase.table("users")
+                .insert({
+                    "auth_uid": auth_uid,
+                    "email": email,
+                    "nickname": email.split("@")[0] if email else "user",
+                })
+                .execute()
+            )
+        except Exception as e:
+            print("🔥 insert error:", e)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="User creation failed",
+            )
         user_id = created.data[0]["id"]
         plan = "free"
 
