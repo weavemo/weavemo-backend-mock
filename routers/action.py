@@ -31,28 +31,3 @@ def get_recommended_actions(current_user=Depends(get_current_user)):
         traceback.print_exc()
         raise
 
-@router.post("/complete")
-def complete_action(
-    body: dict,
-    current_user=Depends(get_current_user),
-):
-    try:
-        supabase = get_supabase()
-
-        action_id = body.get("action_id")
-        user_id = current_user["user_id"]
-
-        res = (
-            supabase.table("user_actions")
-            .insert({
-                "user_id": user_id,
-                "action_id": action_id,
-            })
-            .execute()
-        )
-
-        return {"success": True}
-
-    except Exception:
-        traceback.print_exc()
-        raise
