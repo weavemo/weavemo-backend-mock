@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, HTTPException, Depends, status
 from schemas.auth import LoginRequest, RegisterRequest, AuthResponse
 from core.supabase import get_supabase
@@ -78,7 +79,3 @@ def login(body: LoginRequest):
 @router.get("/profile")
 def profile(current_user=Depends(get_current_user)):
     return {"user": current_user}
-
-@router.post("/logout")
-def logout():
-    return {"ok": True}
