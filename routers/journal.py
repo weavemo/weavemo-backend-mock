@@ -104,33 +104,6 @@ def create_journal(
         "streak_days": new_streak,
     }
 
-# ==============================
-# Journal Count
-# ==============================
-
-@router.get("/count")
-def get_journal_count(
-    current_user=Depends(get_current_user),
-):
-    supabase = get_supabase()
-    user_id = current_user["user_id"]
-
-    stats_res = (
-        supabase.table("user_stats")
-        .select("total_journals")
-        .eq("user_id", user_id)
-        .limit(1)
-        .execute()
-    )
-
-    if not stats_res.data:
-        return {
-            "count": 0,
-        }
-
-    return {
-        "count": stats_res.data[0].get("total_journals", 0),
-    }
 
 # ==============================
 # Daily Reflection (일간 회고)
