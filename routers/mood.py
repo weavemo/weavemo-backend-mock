@@ -104,6 +104,79 @@ def get_analysis(
     current_user=Depends(get_current_user),
 ):
 
+# --------------------------------------
+# Unique Mood Tag Count
+# --------------------------------------
+
+@router.get("/unique-count")
+def get_unique_mood_count(
+    supabase=Depends(get_supabase),
+    current_user=Depends(get_current_user),
+):
+    user_id: int = current_user["user_id"]
+
+    mood_res = (
+        supabase.table("moods")
+        .select("id")
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+    mood_ids = [row["id"] for row in (mood_res.data or [])]
+
+    if not mood_ids:
+        return {
+            "count": 0,
+            "tags": [],
+        }
+
+    tag_res = (
+        supabase.table("mood_emotion_tags")
+        .select("tag_id")
+        .in_("mood_id", mood_ids)
+        .execute()
+    )
+
+    tag_ids = list({
+        row["tag_id"]
+        for row in (tag_res.data or [])
+    })
+
+    if not tag_ids:
+        return {
+            "count": 0,
+            "tags": [],
+        }
+
+    emotion_res = (
+        supabase.table("emotion_tags")
+        .select("code")
+        .in_("id", tag_ids)
+        .execute()
+    )
+
+    target_tags = {
+        "anxious",
+        "irritated",
+        "lethargic",
+        "sad",
+        "calm",
+        "joy",
+        "excited",
+        "grateful",
+    }
+
+    unique_tags = sorted({
+        row["code"]
+        for row in (emotion_res.data or [])
+        if row["code"] in target_tags
+    })
+
+    return {
+        "count": len(unique_tags),
+        "tags": unique_tags,
+    }
+    
     """
     Week 4:
     - range: today | 7d | 30d
