@@ -17,7 +17,11 @@ def get_recommended_actions(current_user=Depends(get_current_user)):
 
         res = (
             supabase.table("actions")
-            .select("id, title, description, type")
+            .select(
+                "id, title, description, type, "
+                "duration_sec, difficulty, "
+                "is_premium, recommended_for"
+            )
             .eq("is_active", True)
             .execute()
         )
