@@ -1,6 +1,6 @@
 # weavemo-backend-mock/routers/mood.py
-from __future__ import annotations
 
+from __future__ import annotations
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
@@ -92,6 +92,7 @@ def submit_mood(
 # --------------------------------------
 # Week 4 — Mood Analysis
 # --------------------------------------
+
 @router.get(
     "/analysis",
     response_model=MoodAnalysisResponse,
@@ -103,6 +104,48 @@ def get_analysis(
     supabase=Depends(get_supabase),
     current_user=Depends(get_current_user),
 ):
+    """
+    Week 4:
+    - range: today | 7d | 30d
+    - 분석은 집계 기반 (AI ❌)
+    """
+
+    user_id: int = current_user["user_id"]
+
+    try:
+        print("[mood/analysis] range=", repr(range))
+        print(
+            "[mood/analysis] get_mood_analysis file=",
+            get_mood_analysis.__code__.co_filename,
+        )
+
+        return get_mood_analysis(
+            supabase=supabase,
+            user_id=user_id,
+            range_key=range.strip().lower(),
+            tz_offset_min=tz_offset_min,
+        )
+
+    except ValueError as e:
+        print("[mood/analysis] ValueError:", repr(e))
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid range value",
+        )
+
+    except Exception as e:
+        print(
+            "[mood/analysis] Exception:",
+            type(e).__name__,
+            repr(e),
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"{type(e).__name__}: {e}",
+        )
+
 
 # --------------------------------------
 # Unique Mood Tag Count
@@ -122,7 +165,10 @@ def get_unique_mood_count(
         .execute()
     )
 
-    mood_ids = [row["id"] for row in (mood_res.data or [])]
+    mood_ids = [
+        row["id"]
+        for row in (mood_res.data or [])
+    ]
 
     if not mood_ids:
         return {
@@ -176,35 +222,3 @@ def get_unique_mood_count(
         "count": len(unique_tags),
         "tags": unique_tags,
     }
-    
-    """
-    Week 4:
-    - range: today | 7d | 30d
-    - 분석은 집계 기반 (AI ❌)
-    """
-
-    user_id: int = current_user["user_id"]
-
-    try:
-        print("[mood/analysis] range=", repr(range))
-        print("[mood/analysis] get_mood_analysis file=", get_mood_analysis.__code__.co_filename)
-
-        return get_mood_analysis(
-            supabase=supabase,
-            user_id=user_id,
-            range_key=range.strip().lower(),
-            tz_offset_min=tz_offset_min,
-        )
-    except ValueError as e:
-        print("[mood/analysis] ValueError:", repr(e))
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid range value",
-        )
-    except Exception as e:
-        # e.g. httpx.ReadError, network issues, supabase errors
-        print("[mood/analysis] Exception:", type(e).__name__, repr(e))
-        raise HTTPException(
-            status_code=500,
-            detail=f"{type(e).__name__}: {e}",
-        )
