@@ -72,6 +72,13 @@ class TodayMoodInfo(BaseModel):
     triggerType: Optional[str]
 
 
+class TodayMoodNote(BaseModel):
+    moodId: int
+    recordedAt: Optional[str] = None
+    note: str
+    triggerType: Optional[str] = None
+
+
 # -------------------------
 # Analysis response
 # -------------------------
@@ -82,3 +89,6 @@ class MoodAnalysisResponse(BaseModel):
     tagsSummary: List[MoodTagSummaryItem]
     metrics: MoodAnalysisMetrics
     todayMood: Optional[TodayMoodInfo] = None
+    todayMoodNotes: List[TodayMoodNote] = Field(
+        default_factory=list
+    )
