@@ -13,6 +13,7 @@ from schemas.mood import (
     SummaryLabel,
     MoodAnalysisMetrics,
     TodayMoodInfo,
+    TodayMoodNote,
 )
 
 # -------------------------
@@ -177,6 +178,7 @@ def get_mood_analysis(
                 dominant_tags=[],
             ),
             todayMood=None,
+            todayMoodNotes=[],
         )
 
     # 2️⃣ points 생성 (raw mood = 1 point)
@@ -193,6 +195,20 @@ def get_mood_analysis(
     # 3️⃣ summary 계산
     # 기준: 마지막 날짜 mood (today / 기간 마지막)
     base = moods[-1]
+    has_note = bool(
+        str(base.get("note") or "").strip()
+    )
+    
+    if range_key == "today":
+        has_note = any(
+            bool(
+                str(
+                    mood.get("note") or ""
+                ).strip()
+            )
+            for mood in moods
+        )
+
     summary = MoodAnalysisSummary(
         mainValence=base["main_valence"],
         energy=base["energy"],
@@ -200,7 +216,7 @@ def get_mood_analysis(
             base["main_valence"],
             base["energy"],
         ),
-        hasNote=bool(base.get("note")),
+        hasNote=has_note,
     )
 
     # 4️⃣ tags summary
@@ -246,6 +262,30 @@ def get_mood_analysis(
             triggerType=base.get("trigger_type"),
         )
 
+    today_mood_notes: List[
+        TodayMoodNote
+    ] = []
+    
+    if range_key == "today":
+        today_mood_notes = [
+            TodayMoodNote(
+                moodId=mood["id"],
+                recordedAt=mood.get(
+                    "recorded_at"
+                ),
+                note=str(
+                    mood.get("note") or ""
+                ).strip(),
+                triggerType=mood.get(
+                    "trigger_type"
+                ),
+            )
+            for mood in moods
+            if str(
+                mood.get("note") or ""
+            ).strip()
+        ]
+
     return MoodAnalysisResponse(
         range=range_key,
         summary=summary,
@@ -253,4 +293,5 @@ def get_mood_analysis(
         tagsSummary=tags_summary,
         metrics=_compute_metrics(points, tags_summary),
         todayMood=today_mood,
+        todayMoodNotes=today_mood_notes,
     )
