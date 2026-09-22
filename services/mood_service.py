@@ -532,6 +532,130 @@ def _build_insight_codes(
 
     return codes
 
+def _build_advice_codes(
+    *,
+    moods: List[Dict[str, Any]],
+    total_days: int,
+    daily_insights: List[
+        MoodDailyInsight
+    ],
+    comparison: MoodPeriodComparison,
+    dominant_trigger: str | None,
+) -> List[str]:
+    advice: List[str] = []
+
+    if not moods:
+        return advice
+
+    avg_valence = _safe_average([
+        mood["main_valence"]
+        for mood in moods
+    ])
+
+    avg_energy = _safe_average([
+        mood["energy"]
+        for mood in moods
+    ])
+
+    positive_ratio = (
+        _positive_ratio(moods)
+    )
+
+    active_days = (
+        _count_active_days(moods)
+    )
+
+    consistency_score = (
+        active_days
+        / total_days
+        * 100
+    )
+
+    # 기록이 아직 부족한 경우
+    if consistency_score < 40:
+        advice.append(
+            "BUILD_CHECKIN_HABIT"
+        )
+
+    # 에너지가 전반적으로 낮은 경우
+    if avg_energy <= 2:
+        advice.append(
+            "REST_PRIORITY"
+        )
+    elif (
+        avg_energy <= 3
+        and avg_valence <= 0
+    ):
+        advice.append(
+            "LIGHT_ACTIVITY"
+        )
+
+    # 감정 또는 에너지 변화가 큰 경우
+    if daily_insights:
+        valence_values = [
+            item.avg_valence
+            for item in daily_insights
+        ]
+
+        energy_values = [
+            item.avg_energy
+            for item in daily_insights
+        ]
+
+        valence_range = (
+            max(valence_values)
+            - min(valence_values)
+        )
+
+        energy_range = (
+            max(energy_values)
+            - min(energy_values)
+        )
+
+        if (
+            valence_range >= 2
+            or energy_range >= 2
+        ):
+            advice.append(
+                "TRACK_DAILY_ROUTINE"
+            )
+
+    # 반복되는 감정 원인이 있는 경우
+    if dominant_trigger:
+        advice.append(
+            "REVIEW_DOMINANT_TRIGGER"
+        )
+
+    # 불편한 감정 비중이 높은 경우
+    if positive_ratio <= 0.3:
+        advice.append(
+            "GENTLE_RECOVERY"
+        )
+
+    # 긍정적인 흐름이 많은 경우
+    elif positive_ratio >= 0.6:
+        advice.append(
+            "REPEAT_POSITIVE_PATTERN"
+        )
+
+    # 이전 기간보다 감정과 에너지가 함께 좋아진 경우
+    if (
+        comparison.previous_available
+        and comparison.avg_valence_delta
+        >= 0.2
+        and comparison.avg_energy_delta
+        >= 0
+    ):
+        advice.append(
+            "KEEP_CURRENT_ROUTINE"
+        )
+
+    # 중복 제거 후 최대 3개만 제공
+    unique_advice = list(
+        dict.fromkeys(advice)
+    )
+
+    return unique_advice[:3]
 
 def _build_period_insights(
     *,
@@ -685,6 +809,19 @@ def _build_period_insights(
         comparison=comparison,
         insight_codes=(
             _build_insight_codes(
+                moods=moods,
+                total_days=total_days,
+                daily_insights=(
+                    daily_insights
+                ),
+                comparison=comparison,
+                dominant_trigger=(
+                    dominant_trigger
+                ),
+            )
+        ),
+        advice_codes=(
+            _build_advice_codes(
                 moods=moods,
                 total_days=total_days,
                 daily_insights=(
