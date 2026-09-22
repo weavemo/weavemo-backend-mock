@@ -196,6 +196,10 @@ class MoodPeriodInsights(BaseModel):
         default_factory=list
     )
 
+    advice_codes: List[str] = Field(
+        default_factory=list
+    )
+
 
 # -------------------------
 # Analysis response
