@@ -760,6 +760,14 @@ def get_mood_analysis(
         else None
     )
 
+    previous_moods: List[
+        Dict[str, Any]
+    ] = []
+
+    # today에서는 None,
+    # 7d와 30d에서는 아래에서 분석 결과를 넣음
+    period_insights = None
+
     if period_days is not None:
         previous_end_utc = start_utc
         previous_start_utc = (
@@ -809,60 +817,46 @@ def get_mood_analysis(
         except Exception:
             previous_moods = []
 
-        if not moods:
-            # 기록 없는 기간
-            return MoodAnalysisResponse(
-                range=range_key,
-                summary=MoodAnalysisSummary(
-                    mainValence=0,
-                    energy=0,
-                    label=(
-                        SummaryLabel.NEUTRAL
-                    ),
-                    hasNote=False,
-                ),
-                points=[],
-                tagsSummary=[],
-                metrics=(
-                    MoodAnalysisMetrics(
-                        avg_valence=0.0,
-                        avg_energy=0.0,
-                        valence_trend="flat",
-                        energy_trend="flat",
-                        energy_volatility=(
-                            "low"
-                        ),
-                        positive_ratio=0.0,
-                        dominant_tags=[],
-                    )
-                ),
-                todayMood=None,
-                todayMoodNotes=[],
-                periodInsights=(
-                    MoodPeriodInsights()
-                    if range_key in (
-                        "7d",
-                        "30d",
-                    )
-                    else None
-                ),
+    # 기록이 없는 경우
+    # today, 7d, 30d 모두 여기에서 처리
+    if not moods:
+        return MoodAnalysisResponse(
+            range=range_key,
+            summary=MoodAnalysisSummary(
+                mainValence=0,
+                energy=0,
+                label=SummaryLabel.NEUTRAL,
+                hasNote=False,
+            ),
+            points=[],
+            tagsSummary=[],
+            metrics=MoodAnalysisMetrics(
+                avg_valence=0.0,
+                avg_energy=0.0,
+                valence_trend="flat",
+                energy_trend="flat",
+                energy_volatility="low",
+                positive_ratio=0.0,
+                dominant_tags=[],
+            ),
+            todayMood=None,
+            todayMoodNotes=[],
+            periodInsights=(
+                MoodPeriodInsights()
+                if period_days is not None
+                else None
+            ),
+        )
+
+    # 7일·30일 전문 분석
+    if period_days is not None:
+        period_insights = (
+            _build_period_insights(
+                moods=moods,
+                previous_moods=previous_moods,
+                total_days=period_days,
             )
-    
-        # 7일·30일 전문 분석
-        period_insights = None
-    
-        if period_days is not None:
-            period_insights = (
-                _build_period_insights(
-                    moods=moods,
-                    previous_moods=(
-                        previous_moods
-                    ),
-                    total_days=(
-                        period_days
-                    ),
-                )
-            )
+        )
 
     # 2️⃣ points 생성 (raw mood = 1 point)
     points = [
