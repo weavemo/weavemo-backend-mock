@@ -92,9 +92,8 @@ def update_profile(
 ):
     supabase = get_supabase()
 
-    user_id = (
-        current_user.get("user_id")
-        or current_user.get("id")
+    user_id = current_user.get(
+        "user_id"
     )
 
     if not user_id:
@@ -121,34 +120,39 @@ def update_profile(
             detail="Nickname is too long",
         )
 
-    current_metadata = (
-        current_user.get("user_metadata")
-        or {}
+    result = (
+        supabase.table("users")
+        .update({
+            "nickname": nickname,
+        })
+        .eq("id", user_id)
+        .execute()
     )
 
-    next_metadata = {
-        **current_metadata,
-        "nickname": nickname,
-    }
+    if not result.data:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
 
-    supabase.auth.admin.update_user_by_id(
-        user_id,
-        {
-            "user_metadata": next_metadata,
-        },
-    )
+    updated_user = result.data[0]
 
     return {
-        "id": user_id,
-        "email": current_user.get("email"),
-        "nickname": nickname,
-        "profile_image_url": (
-            next_metadata.get(
-                "profile_image_url"
-            )
+        "id": updated_user.get(
+            "id"
         ),
+        "email": updated_user.get(
+            "email",
+            current_user.get("email"),
+        ),
+        "nickname": updated_user.get(
+            "nickname"
+        ),
+        "profile_image_url":
+            updated_user.get(
+                "profile_image_url"
+            ),
     }
-
 
 @router.post("/profile/image")
 async def upload_profile_image(
@@ -230,28 +234,26 @@ async def upload_profile_image(
         or {}
     )
 
-    next_metadata = {
-        **current_metadata,
-        "profile_image_url": image_url,
-    }
-
-    # get_current_user가 metadata를 평면화해서
-    # 반환하는 경우에도 닉네임을 보존
-    if (
-        "nickname" not in next_metadata
-        and current_user.get("nickname")
-    ):
-        next_metadata["nickname"] = (
-            current_user["nickname"]
-        )
-
-    supabase.auth.admin.update_user_by_id(
-        user_id,
-        {
-            "user_metadata": next_metadata,
-        },
+    result = (
+        supabase.table("users")
+        .update({
+            "profile_image_url":
+                image_url,
+        })
+        .eq("id", user_id)
+        .execute()
     )
-
+    
+    if not result.data:
+        if file_path.exists():
+            file_path.unlink()
+    
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+    
     return {
-        "profile_image_url": image_url,
+        "profile_image_url":
+            image_url,
     }
