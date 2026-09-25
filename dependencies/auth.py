@@ -42,7 +42,8 @@ def get_current_user(
     try:
         res = (
             supabase.table("users")
-            .select("id, plan")
+            .select(
+                "id, plan, nickname, profile_image_url")
             .eq("auth_uid", auth_uid)
             .limit(1)
             .execute()
@@ -60,6 +61,10 @@ def get_current_user(
     if rows:
         user_id = rows[0]["id"]
         plan = rows[0].get("plan")
+        nickname = rows[0].get("nickname")
+        profile_image_url = rows[0].get(
+            "profile_image_url"
+        )
     else:
         try:
             created = (
@@ -67,7 +72,11 @@ def get_current_user(
                 .insert({
                     "auth_uid": auth_uid,
                     "email": email,
-                    "nickname": email.split("@")[0] if email else "user",
+                    "nickname": (
+                        email.split("@")[0]
+                        if email
+                        else "user"
+                    ),
                 })
                 .execute()
             )
@@ -77,8 +86,13 @@ def get_current_user(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="User creation failed",
             )
+    
         user_id = created.data[0]["id"]
         plan = "free"
+        nickname = created.data[0].get(
+            "nickname"
+        )
+        profile_image_url = None
 
     # 3️⃣ 내부 user 객체 반환 (BIGINT id!)
     return {
@@ -86,4 +100,6 @@ def get_current_user(
         "auth_uid": auth_uid, # 참고용
         "email": email,
         "plan": plan,
+        "nickname": nickname,
+        "profile_image_url": profile_image_url,
     }
