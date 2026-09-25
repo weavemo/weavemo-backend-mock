@@ -5,8 +5,21 @@ from routers import auth, user, mood, stats, action, journal, badge, journal_ent
 from routers.posts import router as posts_router
 from routers.comments import router as comments_router
 from routers.comments_actions import router as comments_actions_router
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
+
+Path("uploads/profiles").mkdir(
+    parents=True,
+    exist_ok=True,
+)
+
+app.mount(
+    "/uploads",
+    StaticFiles(directory="uploads"),
+    name="uploads",
+)
 
 origins = [
     "http://localhost:5173",
