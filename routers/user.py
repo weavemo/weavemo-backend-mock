@@ -229,11 +229,6 @@ async def upload_profile_image(
         )
     )
 
-    current_metadata = (
-        current_user.get("user_metadata")
-        or {}
-    )
-
     result = (
         supabase.table("users")
         .update({
