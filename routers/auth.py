@@ -92,7 +92,7 @@ def login(body: LoginRequest):
         },
         "token": res.session.access_token,
         "expiresIn": res.session.expires_in,
-        "refreshToken": None,
+        "refreshToken": res.session.refresh_token,
     }
 
 
