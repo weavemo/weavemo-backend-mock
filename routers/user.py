@@ -337,13 +337,11 @@ def verify_current_password(
         )
 
 
-def update_auth_user(
-    token: str,
-    changes: dict,
-):
+def update_auth_user(token: str, changes: dict, redirect_to: str | None = None):
     try:
         response = httpx.put(
             f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/user",
+            params={"redirect_to": redirect_to} if redirect_to else None,
             headers={
                 "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
                 "Authorization": f"Bearer {token}",
@@ -396,6 +394,7 @@ def change_email(
     update_auth_user(
         credentials.credentials,
         {"email": new_email},
+        redirect_to="http://www.localhost:5173/login",
     )
 
     # 여기서 users.email을 변경하지 않는다.
