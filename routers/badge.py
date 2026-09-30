@@ -1,7 +1,6 @@
 # routers/badge.py
 
 from fastapi import APIRouter, Depends
-from datetime import datetime
 from dependencies.auth import get_current_user
 from db.database import get_supabase
 
@@ -21,6 +20,7 @@ def get_my_badges(current_user=Depends(get_current_user)):
     )
 
     items = []
+
     for row in res.data or []:
         badge = row.get("badges")
         if not badge:
@@ -38,7 +38,7 @@ def get_my_badges(current_user=Depends(get_current_user)):
 
 @router.post("/check")
 def check_badges(
-    source: str,
+    source: str | None = None,
     current_user=Depends(get_current_user),
 ):
     supabase = get_supabase()
@@ -46,52 +46,67 @@ def check_badges(
 
     stats_res = (
         supabase.table("user_stats")
-        .select("*")
+        .select(
+            "streak_days, total_moods, "
+            "total_journals, total_actions"
+        )
         .eq("user_id", user_id)
+        .limit(1)
         .execute()
     )
-    stats = stats_res.data[0]
 
-    earned = []
-
-    if source == "action" and stats["total_actions"] >= 5:
-        earned.append("calmdown_rookie")
-
-    if source == "journal" and stats["total_journals"] >= 5:
-        earned.append("journal_starter")
-
-    if stats["streak_days"] >= 7:
-        earned.append("streak_7")
-
-    if not earned:
+    if not stats_res.data:
         return {"earned": []}
 
-    badges = (
+    stats = stats_res.data[0]
+
+    badges_res = (
         supabase.table("badges")
-        .select("id, code")
-        .in_("code", earned)
+        .select("id, code, condition_type, condition_value")
         .execute()
-        .data
     )
 
-    owned = (
+    owned_res = (
         supabase.table("user_badges")
         .select("badge_id")
         .eq("user_id", user_id)
         .execute()
-        .data
     )
-    owned_ids = {o["badge_id"] for o in owned}
 
-    new_badges = [b for b in badges if b["id"] not in owned_ids]
+    owned_ids = {
+        row["badge_id"]
+        for row in owned_res.data or []
+    }
 
-    for b in new_badges:
+    earned = []
+
+    for badge in badges_res.data or []:
+        if badge["id"] in owned_ids:
+            continue
+
+        condition = badge["condition_type"]
+        required = badge["condition_value"]
+
+        # 현재 구현한 네 가지 누적 기록만 검사한다.
+        if condition not in {
+            "streak_days",
+            "total_moods",
+            "total_journals",
+            "total_actions",
+        }:
+            continue
+
+        actual = stats.get(condition) or 0
+
+        if actual < required:
+            continue
+
         supabase.table("user_badges").insert({
             "user_id": user_id,
-            "badge_id": b["id"],
-            "earned_at": datetime.utcnow().isoformat(),
+            "badge_id": badge["id"],
         }).execute()
 
-    return {
-        "earned": [b["code"] for b in new_badges]
-    }
+        earned.append(badge["code"])
+        owned_ids.add(badge["id"])
+
+    return {"earned": earned}
