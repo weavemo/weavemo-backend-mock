@@ -7,6 +7,7 @@ from routers.comments import router as comments_router
 from routers.comments_actions import router as comments_actions_router
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
+from routers import rewards
 
 app = FastAPI()
 
