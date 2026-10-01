@@ -32,25 +32,48 @@ def complete_action(auth_uid: str, collection_key: str):
     }
 
 
-def get_collections(user_id: str):
+# file: weavemo-backend-mock/services/collection_service.py
+def get_collections(auth_uid: str):
     supabase = get_supabase()
 
-    result = supabase.table("collections") \
+    result = (
+        supabase.table("collections")
         .select("""
             id,
             key,
             name,
-            collection_fragments(id),
+            total_fragments,
+            collection_fragments(id, key, name, fragment_order),
             collection_rewards(
-                reward_items(
-                    key,
-                    name
-                )
+                reward_items(key, name)
             )
-        """) \
+        """)
+        .eq("is_active", True)
         .execute()
+    )
 
-    return result.data
+    collections = result.data or []
+
+    owned_res = (
+        supabase.table("user_fragment_inventory")
+        .select("fragment_id")
+        .eq("user_id", auth_uid)
+        .gt("quantity", 0)
+        .execute()
+    )
+    owned_ids = {
+        str(row["fragment_id"])
+        for row in owned_res.data or []
+    }
+
+    for collection in collections:
+        fragments = collection.get("collection_fragments") or []
+        fragments.sort(key=lambda f: f["fragment_order"])
+
+        for fragment in fragments:
+            fragment["owned"] = str(fragment["id"]) in owned_ids
+
+    return collections
 
 
 def get_user_behaviors(user_id: str):
