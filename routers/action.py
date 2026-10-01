@@ -35,30 +35,41 @@ def get_recommended_actions(current_user=Depends(get_current_user)):
         traceback.print_exc()
         raise
 
+# file: weavemo-backend-mock/routers/action.py
+
 @router.post("/complete")
 def complete_action(
     body: dict,
     current_user=Depends(get_current_user),
 ):
-    supabase = get_supabase()
-    user_id = current_user["user_id"]
-
     action_id = body.get("action_id")
 
-    if action_id is None:
+    if isinstance(action_id, bool):
+        action_id = None
+
+    try:
+        action_id = int(action_id)
+    except (TypeError, ValueError):
+        action_id = None
+
+    if action_id is None or action_id <= 0:
         return {
             "ok": False,
-            "error": "action_id_required",
+            "error": "invalid_action_id",
         }
 
-    supabase.table("action_logs").insert({
-        "user_id": user_id,
-        "action_id": action_id,
-    }).execute()
+    supabase = get_supabase()
 
-    return {
-        "ok": True,
-    }
+    result = supabase.rpc(
+        "complete_action_with_fragment",
+        {
+            "p_user_id": current_user["user_id"],
+            "p_auth_uid": current_user["auth_uid"],
+            "p_action_id": action_id,
+        },
+    ).execute()
+
+    return result.data
 
 @router.get("/completed/count")
 def get_completed_action_count(
