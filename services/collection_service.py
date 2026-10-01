@@ -3,7 +3,7 @@
 from db.database import get_supabase
 
 
-def complete_action(user_id: str, collection_key: str):
+def complete_action(auth_uid: str, collection_key: str):
     supabase = get_supabase()
 
     # collection 조회
@@ -22,7 +22,7 @@ def complete_action(user_id: str, collection_key: str):
     result = supabase.rpc(
         "complete_action",
         {
-            "p_user_id": user_id,
+            "p_user_id": auth_uid,
             "p_collection_id": collection_id
         }
     ).execute()
