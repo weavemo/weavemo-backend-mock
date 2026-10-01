@@ -13,7 +13,7 @@ router = APIRouter()
 
 @router.post("/complete")
 def complete(collection_key: str, user=Depends(get_current_user)):
-    return complete_action(user["user_id"], collection_key)
+    return complete_action(user["auth_uid"], collection_key)
 
 
 @router.get("")
