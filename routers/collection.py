@@ -18,7 +18,7 @@ def complete(collection_key: str, user=Depends(get_current_user)):
 
 @router.get("")
 def list_collections(user=Depends(get_current_user)):
-    return get_collections(user["user_id"])
+    return get_collections(user["auth_uid"])
 
 
 @router.get("/behaviors")
