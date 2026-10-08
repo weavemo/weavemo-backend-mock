@@ -3,6 +3,10 @@
 from db.database import get_supabase
 
 
+# file: services/collection_service.py
+
+# file: services/collection_service.py
+
 def get_collections(auth_uid: str):
     supabase = get_supabase()
 
@@ -28,6 +32,7 @@ def get_collections(auth_uid: str):
         """)
         .eq("is_active", True)
         .order("collection_order")
+        .order("key")
         .execute()
     )
 
@@ -82,11 +87,80 @@ def get_collections(auth_uid: str):
         )
 
         for fragment in fragments:
-            fragment["owned"] = (
-                str(fragment["id"]) in owned_ids
-            )
+            fragment["owned"] = str(fragment["id"]) in owned_ids
 
         collection["collection_fragments"] = fragments
+
+        # 현재 보상을 먼저 표시하고, 다음 보상으로 최대 4칸 구성
+        previews = []
+        seen_reward_keys = set()
+
+        def add_rewards(source, is_current):
+            for link in source.get("collection_rewards") or []:
+                reward = link.get("reward_items")
+
+                if not reward or reward["key"] in seen_reward_keys:
+                    continue
+
+                seen_reward_keys.add(reward["key"])
+
+                previews.append({
+                    "collection_key": source["key"],
+                    "collection_order": source["collection_order"],
+                    "is_current": is_current,
+                    "reward_items": reward,
+                })
+
+        add_rewards(collection, True)
+
+        current_order = collection["collection_order"]
+
+        for upcoming in collections:
+            if len(previews) >= 4:
+                break
+
+            upcoming_order = upcoming.get("collection_order")
+
+            if (
+                upcoming.get("action_type") != collection["action_type"]
+                or upcoming_order is None
+                or upcoming_order <= current_order
+            ):
+                continue
+
+            upcoming_fragments = (
+                upcoming.get("collection_fragments") or []
+            )
+
+            # 조각이 없거나 이미 완성한 컬렉션은 미리보기에서 제외
+            if not upcoming_fragments:
+                continue
+
+            if all(
+                str(fragment["id"]) in owned_ids
+                for fragment in upcoming_fragments
+            ):
+                continue
+
+            for link in upcoming.get("collection_rewards") or []:
+                if len(previews) >= 4:
+                    break
+
+                reward = link.get("reward_items")
+
+                if not reward or reward["key"] in seen_reward_keys:
+                    continue
+
+                seen_reward_keys.add(reward["key"])
+
+                previews.append({
+                    "collection_key": upcoming["key"],
+                    "collection_order": upcoming_order,
+                    "is_current": False,
+                    "reward_items": reward,
+                })
+
+        collection["reward_previews"] = previews
 
     return current_collections
 
