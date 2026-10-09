@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends
 from dependencies.auth import get_current_user
 from db.database import get_supabase
-
+from routers.mood import get_unique_mood_count
 router = APIRouter()
 
 
@@ -87,20 +87,28 @@ def check_badges(
         condition = badge["condition_type"]
         required = badge["condition_value"]
 
-        # 현재 구현한 네 가지 누적 기록만 검사한다.
-        if condition not in {
-            "streak_days",
-            "total_moods",
-            "total_journals",
-            "total_actions",
-        }:
-            continue
+        if badge["code"] == "all_moods":
+            # 기존 API와 동일한 8개 감정 태그를 집계한다.
+            mood_count = get_unique_mood_count(
+                supabase=supabase,
+                current_user=current_user,
+            )
 
-        actual = stats.get(condition) or 0
+            if mood_count["count"] < 8:
+                continue
+        else:
+            if condition not in {
+                "streak_days",
+                "total_moods",
+                "total_journals",
+                "total_actions",
+            }:
+                continue
 
-        if actual < required:
-            continue
+            actual = stats.get(condition) or 0
 
+            if actual < required:
+                continue
         supabase.table("user_badges").insert({
             "user_id": user_id,
             "badge_id": badge["id"],
