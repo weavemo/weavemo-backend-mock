@@ -47,7 +47,6 @@ def create_journal(
     user_id = current_user["user_id"]
 
     today = date.today()
-    today_str = today.isoformat()
     start = datetime.combine(today, time.min).isoformat()
     end = datetime.combine(today, time.max).isoformat()
 
@@ -75,8 +74,7 @@ def create_journal(
         "created_at": datetime.utcnow().isoformat(),
     }).execute()
 
-    # total_journals는 기존에 설치한 DB 트리거가 갱신한다.
-    # XP와 연속 활동 집계는 공용 DB 함수가 처리한다.
+    # total_journals는 DB 트리거에서 처리
     xp_result = {}
     xp_pending = False
 
@@ -128,12 +126,11 @@ def create_daily_reflection(
     user_id = current_user["user_id"]
 
     today = date.today()
-    today_str = today.isoformat()
     start = datetime.combine(today, time.min).isoformat()
     end = datetime.combine(today, time.max).isoformat()
     now = datetime.utcnow().isoformat()
 
-    # 기존 오늘 journal 조회 유지
+    # 기존 날짜 조회 방식 유지
     exists = (
         supabase.table("journals")
         .select("id")
@@ -144,8 +141,6 @@ def create_daily_reflection(
         .execute()
     )
 
-    created = False
-
     if exists.data:
         journal_id = exists.data[0]["id"]
 
@@ -154,75 +149,85 @@ def create_daily_reflection(
             "updated_at": now,
         }).eq("id", journal_id).execute()
     else:
-        res = supabase.table("journals").insert({
+        result = supabase.table("journals").insert({
             "user_id": user_id,
             "content": content,
             "created_at": now,
             "updated_at": now,
         }).execute()
 
-        journal_id = res.data[0]["id"]
-        created = True
+        journal_id = result.data[0]["id"]
 
-    # 기존 회고 분석 처리 유지
-    metrics_res = supabase.rpc(
-        "get_today_mood_metrics",
-        {"uid": user_id},
-    ).execute()
-
-    if metrics_res.data:
-        metrics = (
-            metrics_res.data[0]
-            if isinstance(metrics_res.data, list)
-            else metrics_res.data
-        )
-
-        analysis = build_reflection_analysis(metrics)
-
-        existing_analysis = (
-            supabase.table("journal_analysis")
-            .select("id")
-            .eq("journal_id", journal_id)
-            .execute()
-        )
-
-        if existing_analysis.data:
-            supabase.table("journal_analysis").update({
-                "summary_text": "\n".join(analysis["summary"]),
-                "updated_at": now,
-            }).eq("journal_id", journal_id).execute()
-        else:
-            supabase.table("journal_analysis").insert({
-                "journal_id": journal_id,
-                "summary_text": "\n".join(analysis["summary"]),
-                "created_at": now,
-            }).execute()
-
-    # 기존처럼 처음 생성한 경우에만 XP 요청
-    gained = 0
+    # 저장 성공 이후 XP 처리
+    # 수정·재요청 시에도 공용 함수가 하루 중복 지급을 막는다.
+    xp_result = {}
     xp_pending = False
 
-    if created:
-        try:
-            xp_result = grant_journal_xp(
-                supabase,
-                user_id,
-                tz_offset_min,
+    try:
+        xp_result = grant_journal_xp(
+            supabase,
+            user_id,
+            tz_offset_min,
+        )
+    except Exception:
+        xp_pending = True
+        logger.exception(
+            "Reflection saved but XP grant failed: journal_id=%s",
+            journal_id,
+        )
+
+    # 분석 실패는 회고 저장 성공과 분리
+    analysis_pending = False
+
+    try:
+        metrics_res = supabase.rpc(
+            "get_today_mood_metrics",
+            {"uid": user_id},
+        ).execute()
+
+        if metrics_res.data:
+            metrics = (
+                metrics_res.data[0]
+                if isinstance(metrics_res.data, list)
+                else metrics_res.data
             )
 
-            gained = xp_result.get("gained_xp", 0)
-        except Exception:
-            xp_pending = True
-            logger.exception(
-                "Reflection saved but XP grant failed: journal_id=%s",
-                journal_id,
+            analysis = build_reflection_analysis(metrics)
+
+            existing_analysis = (
+                supabase.table("journal_analysis")
+                .select("id")
+                .eq("journal_id", journal_id)
+                .execute()
             )
+
+            if existing_analysis.data:
+                supabase.table("journal_analysis").update({
+                    "summary_text": "\n".join(analysis["summary"]),
+                    "updated_at": now,
+                }).eq("journal_id", journal_id).execute()
+            else:
+                supabase.table("journal_analysis").insert({
+                    "journal_id": journal_id,
+                    "summary_text": "\n".join(analysis["summary"]),
+                    "created_at": now,
+                }).execute()
+        else:
+            analysis_pending = True
+
+    except Exception:
+        analysis_pending = True
+        logger.exception(
+            "Reflection saved but analysis failed: journal_id=%s",
+            journal_id,
+        )
 
     return {
         "ok": True,
         "journal_id": journal_id,
-        "xp_gained": gained,
+        "xp_gained": xp_result.get("gained_xp", 0),
         "xp_pending": xp_pending,
+        "analysis_pending": analysis_pending,
     }
 
 
