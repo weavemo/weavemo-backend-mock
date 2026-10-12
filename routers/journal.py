@@ -2,7 +2,7 @@
 
 import logging
 from datetime import date, datetime, time
-
+from services.mood_service import get_mood_analysis
 from fastapi import APIRouter, Depends, Header, Body
 
 from dependencies.auth import get_current_user
@@ -176,43 +176,47 @@ def create_daily_reflection(
             journal_id,
         )
 
-    # 분석 실패는 회고 저장 성공과 분리
-    analysis_pending = False
+       analysis_pending = False
 
     try:
-        metrics_res = supabase.rpc(
-            "get_today_mood_metrics",
-            {"uid": user_id},
-        ).execute()
+        mood_analysis = get_mood_analysis(
+            supabase=supabase,
+            user_id=user_id,
+            range_key="today",
+            tz_offset_min=tz_offset_min,
+        )
 
-        if metrics_res.data:
-            metrics = (
-                metrics_res.data[0]
-                if isinstance(metrics_res.data, list)
-                else metrics_res.data
+        if mood_analysis.points:
+            analysis = build_reflection_analysis(
+                mood_analysis
             )
-
-            analysis = build_reflection_analysis(metrics)
 
             existing_analysis = (
                 supabase.table("journal_analysis")
                 .select("id")
                 .eq("journal_id", journal_id)
+                .limit(1)
                 .execute()
             )
 
+            summary_text = "\n".join(analysis["summary"])
+
             if existing_analysis.data:
                 supabase.table("journal_analysis").update({
-                    "summary_text": "\n".join(analysis["summary"]),
+                    "summary_text": summary_text,
                     "updated_at": now,
-                }).eq("journal_id", journal_id).execute()
+                }).eq(
+                    "id",
+                    existing_analysis.data[0]["id"],
+                ).execute()
             else:
                 supabase.table("journal_analysis").insert({
                     "journal_id": journal_id,
-                    "summary_text": "\n".join(analysis["summary"]),
+                    "summary_text": summary_text,
                     "created_at": now,
                 }).execute()
         else:
+            # 감정 기록이 없으면 분석 문장을 만들지 않는다.
             analysis_pending = True
 
     except Exception:
@@ -221,6 +225,7 @@ def create_daily_reflection(
             "Reflection saved but analysis failed: journal_id=%s",
             journal_id,
         )
+        
 
     return {
         "ok": True,
