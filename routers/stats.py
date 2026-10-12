@@ -1,16 +1,11 @@
 # /routers/stats.py
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from datetime import date, datetime, time, timezone, timedelta
 import traceback
 
 from dependencies.auth import get_current_user
 from db.database import get_supabase
-from services.stats_service import (
-    calculate_level,
-    apply_daily_xp,
-    calc_streak,
-)
 
 router = APIRouter()
 
@@ -126,113 +121,61 @@ def get_completed_actions_today(tz_offset_min: int = Query(0), current_user=Depe
 @router.post("/xp/increment")
 def increment_xp(
     amount: int = Query(None, gt=0),
-    source: str = Query(None),   # journal | mood | action
+    source: str = Query(None),
     action_id: int | None = Query(None),
-    tz_offset_min: int = Query(0),
+    tz_offset_min: int = Query(0, ge=-840, le=840),
     current_user=Depends(get_current_user),
 ):
     if amount is None or source is None:
-        raise ValueError("amount and source are required")
-        
-    supabase = get_supabase()
-    user_id = current_user["user_id"]
-    source = source.lower()
+        raise HTTPException(
+            status_code=400,
+            detail="amount and source are required",
+        )
+
+    source = source.strip().lower()
+
     if source == "journals":
         source = "journal"
 
-    today_str, start, end = _user_today_range_utc(tz_offset_min)
+    expected_amounts = {
+        "mood": 10,
+        "journal": 10,
+        "action": 15,
+    }
 
-    # ── user_stats 조회 ────────────────────────
-    row = _get_or_create_user_stats(supabase, user_id)
-
-    # ── ACTION 하루 1회 가드 (추가된 유일한 로직) ──────────
-    if source == "action":
-        if action_id is None:
-            return {"gained_xp": 0, "blocked": True}
-
-        # start / end already calculated in user timezone (UTC)
-        existing = (
-            supabase.table("action_logs")
-            .select("id")
-            .eq("user_id", user_id)
-            .eq("action_id", action_id)
-#            .gte("started_at", start)
-#            .lte("started_at", end)
-            .gte("completed_at", start)
-            .lte("completed_at", end)
-            .limit(1)
-            .execute()
+    if source not in expected_amounts:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid XP source",
         )
 
-        if existing.data:
-            return {"gained_xp": 0, "blocked": True}
+    if amount != expected_amounts[source]:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid XP amount",
+        )
 
-    # ── SOURCE별 하루 1회 가드 (기존 그대로) ──────────
-    if source == "mood" and row.get("daily_mood_xp_date") == today_str:
-        return {"gained_xp": 0, "blocked": True}
+    if source == "action" and (
+        action_id is None or action_id <= 0
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="action_id is required",
+        )
 
-    if source in ["journal", "journals"] and row.get("daily_journal_xp_date") == today_str:
-        return {"gained_xp": 0, "blocked": True}
+    supabase = get_supabase()
 
-    # ── DAILY XP CAP (기존 그대로) ─────────────────
-    daily_xp = row["daily_xp"] if row["daily_xp_date"] == today_str else 0
-    new_daily_xp, gained = apply_daily_xp(daily_xp, amount)
+    result = supabase.rpc(
+        "grant_activity_xp",
+        {
+            "p_user_id": current_user["user_id"],
+            "p_source": source,
+            "p_action_id": action_id,
+            "p_tz_offset_min": tz_offset_min,
+        },
+    ).execute()
 
-    if gained == 0:
-        return {"gained_xp": 0, "blocked": True}
-
-    new_xp = row["xp"] + gained
-    new_level = calculate_level(new_xp)
-
-    # ── STREAK (기존 그대로) ─────────────────────
-    delta = calc_streak(row["last_checkin_date"], date.fromisoformat(today_str))
-    new_streak = row["streak_days"]
-    if delta == 1:
-        new_streak += 1
-    elif delta == -1:
-        new_streak = 1
-
-    update_data = {
-        "xp": new_xp,
-        "level": new_level,
-        "daily_xp": new_daily_xp,
-        "daily_xp_date": today_str,
-        "streak_days": new_streak,
-        "last_checkin_date": today_str,
-        "updated_at": "now()",
-    }
-
-    if source == "mood":
-        update_data["daily_mood_xp_date"] = today_str
-
-    if source == "journal":
-        update_data["daily_journal_xp_date"] = today_str
-
-    supabase.table("user_stats").update(update_data).eq("user_id", user_id).execute()
-
-    # ── ACTION 완료 기록 (추가된 유일한 insert) ──────────
-#    if source == "action":
-#        supabase.table("action_logs").insert({
-#            "user_id": user_id,
-#            "action_id": action_id,
-#            "started_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
-#        }).execute()
-    if source == "action":
-       supabase.table("action_logs").insert({
-           "user_id": user_id,
-           "action_id": action_id,
-           # started_at은 DB default(now())
-           "completed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
-       }).execute()
-
-    return {
-        "gained_xp": gained,
-        "total_xp": new_xp,
-        "level": new_level,
-        "streak_days": new_streak,
-        "daily_xp": new_daily_xp,
-        "blocked": False,
-    }
+    return result.dataf
 
 @router.post("/actions/feedback")
 def save_action_feedback(
