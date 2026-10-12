@@ -3,7 +3,7 @@
 import logging
 from datetime import date, datetime, time
 from services.mood_service import get_mood_analysis
-from fastapi import APIRouter, Depends, Header, Body
+from fastapi import APIRouter, Depends, Header, Body, HTTPException
 
 from dependencies.auth import get_current_user
 from db.database import get_supabase
@@ -287,4 +287,83 @@ def get_daily_reflection(
         "content": journal["content"],
         "summary_text": summary,
         "created_at": journal["created_at"],
+    }
+
+@router.post("/daily/{journal_id}/analysis")
+def regenerate_daily_reflection_analysis(
+    journal_id: int,
+    current_user=Depends(get_current_user),
+    tz_offset_min: int = Header(
+        0,
+        convert_underscores=False,
+        ge=-840,
+        le=840,
+    ),
+):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+
+    today = date.today()
+    start = datetime.combine(today, time.min).isoformat()
+    end = datetime.combine(today, time.max).isoformat()
+
+    journal_res = (
+        supabase.table("journals")
+        .select("id")
+        .eq("id", journal_id)
+        .eq("user_id", user_id)
+        .gte("created_at", start)
+        .lte("created_at", end)
+        .limit(1)
+        .execute()
+    )
+
+    if not journal_res.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Today's reflection not found",
+        )
+
+    mood_analysis = get_mood_analysis(
+        supabase=supabase,
+        user_id=user_id,
+        range_key="today",
+        tz_offset_min=tz_offset_min,
+    )
+
+    if not mood_analysis.points:
+        raise HTTPException(
+            status_code=409,
+            detail="Today's mood analysis is unavailable",
+        )
+
+    analysis = build_reflection_analysis(mood_analysis)
+    summary_text = "\n".join(analysis["summary"])
+
+    existing = (
+        supabase.table("journal_analysis")
+        .select("id")
+        .eq("journal_id", journal_id)
+        .limit(1)
+        .execute()
+    )
+
+    now = datetime.utcnow().isoformat()
+
+    if existing.data:
+        supabase.table("journal_analysis").update({
+            "summary_text": summary_text,
+            "updated_at": now,
+        }).eq("id", existing.data[0]["id"]).execute()
+    else:
+        supabase.table("journal_analysis").insert({
+            "journal_id": journal_id,
+            "summary_text": summary_text,
+            "created_at": now,
+        }).execute()
+
+    return {
+        "ok": True,
+        "journal_id": journal_id,
+        "summary_text": summary_text,
     }
