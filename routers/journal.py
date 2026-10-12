@@ -3,7 +3,7 @@
 import logging
 from datetime import date, datetime, time
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Body
 
 from dependencies.auth import get_current_user
 from db.database import get_supabase
@@ -115,7 +115,7 @@ def create_journal(
 
 @router.post("/daily")
 def create_daily_reflection(
-    content: str,
+    content: str = Body(..., embed=True),
     current_user=Depends(get_current_user),
     tz_offset_min: int = Header(
         0,
