@@ -63,11 +63,6 @@ def create_journal(
     )
     row = stats_res.data[0]
 
-    # 3️⃣ total_journals +1
-    supabase.table("user_stats").update({
-        "total_journals": row["total_journals"] + 1
-    }).eq("user_id", user_id).execute()
-
     # 4️⃣ XP (+10, daily cap 적용)
     daily_xp = row["daily_xp"]
     if row["daily_xp_date"] != today_str:
@@ -198,10 +193,6 @@ def create_daily_reflection(
             .execute()
         )
         row = stats_res.data[0]
-
-        supabase.table("user_stats").update({
-            "total_journals": row["total_journals"] + 1
-        }).eq("user_id", user_id).execute()
 
         daily_xp = row["daily_xp"]
         if row["daily_xp_date"] != today_str:
