@@ -61,7 +61,6 @@ def save_reflection_analysis(
     if existing.data:
         supabase.table("journal_analysis").update({
             "summary_text": summary_text,
-            "updated_at": now,
         }).eq("id", existing.data[0]["id"]).execute()
     else:
         supabase.table("journal_analysis").insert({
