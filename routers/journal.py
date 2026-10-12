@@ -1,24 +1,21 @@
-# weavemo-backend-mock/routers/journal.py
+# routers/journal.py
 
 import logging
 from datetime import date, datetime, time
-from services.mood_service import get_mood_analysis
+
 from fastapi import APIRouter, Depends, Header, Body, HTTPException
 
 from dependencies.auth import get_current_user
 from db.database import get_supabase
 from schemas.journal import JournalCreate
+from services.mood_service import get_mood_analysis
 from services.mood_analysis_service import build_reflection_analysis
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def grant_journal_xp(
-    supabase,
-    user_id: int,
-    tz_offset_min: int,
-):
+def grant_journal_xp(supabase, user_id: int, tz_offset_min: int):
     result = supabase.rpc(
         "grant_activity_xp",
         {
@@ -30,6 +27,50 @@ def grant_journal_xp(
     ).execute()
 
     return result.data
+
+
+def save_reflection_analysis(
+    supabase,
+    user_id: int,
+    journal_id: int,
+    tz_offset_min: int,
+):
+    mood_analysis = get_mood_analysis(
+        supabase=supabase,
+        user_id=user_id,
+        range_key="today",
+        tz_offset_min=tz_offset_min,
+    )
+
+    if not mood_analysis.points:
+        return None
+
+    analysis = build_reflection_analysis(mood_analysis)
+    summary_text = "\n".join(analysis["summary"])
+
+    existing = (
+        supabase.table("journal_analysis")
+        .select("id")
+        .eq("journal_id", journal_id)
+        .limit(1)
+        .execute()
+    )
+
+    now = datetime.utcnow().isoformat()
+
+    if existing.data:
+        supabase.table("journal_analysis").update({
+            "summary_text": summary_text,
+            "updated_at": now,
+        }).eq("id", existing.data[0]["id"]).execute()
+    else:
+        supabase.table("journal_analysis").insert({
+            "journal_id": journal_id,
+            "summary_text": summary_text,
+            "created_at": now,
+        }).execute()
+
+    return summary_text
 
 
 @router.post("")
@@ -50,7 +91,6 @@ def create_journal(
     start = datetime.combine(today, time.min).isoformat()
     end = datetime.combine(today, time.max).isoformat()
 
-    # 기존 하루 1회 제한 유지
     exists = (
         supabase.table("journals")
         .select("id")
@@ -74,7 +114,6 @@ def create_journal(
         "created_at": datetime.utcnow().isoformat(),
     }).execute()
 
-    # total_journals는 DB 트리거에서 처리
     xp_result = {}
     xp_pending = False
 
@@ -107,10 +146,6 @@ def create_journal(
     return response
 
 
-# ==============================
-# Daily Reflection
-# ==============================
-
 @router.post("/daily")
 def create_daily_reflection(
     content: str = Body(..., embed=True),
@@ -130,7 +165,6 @@ def create_daily_reflection(
     end = datetime.combine(today, time.max).isoformat()
     now = datetime.utcnow().isoformat()
 
-    # 기존 날짜 조회 방식 유지
     exists = (
         supabase.table("journals")
         .select("id")
@@ -158,8 +192,6 @@ def create_daily_reflection(
 
         journal_id = result.data[0]["id"]
 
-    # 저장 성공 이후 XP 처리
-    # 수정·재요청 시에도 공용 함수가 하루 중복 지급을 막는다.
     xp_result = {}
     xp_pending = False
 
@@ -176,56 +208,23 @@ def create_daily_reflection(
             journal_id,
         )
 
-       analysis_pending = False
+    analysis_pending = False
 
     try:
-        mood_analysis = get_mood_analysis(
-            supabase=supabase,
-            user_id=user_id,
-            range_key="today",
-            tz_offset_min=tz_offset_min,
+        summary_text = save_reflection_analysis(
+            supabase,
+            user_id,
+            journal_id,
+            tz_offset_min,
         )
 
-        if mood_analysis.points:
-            analysis = build_reflection_analysis(
-                mood_analysis
-            )
-
-            existing_analysis = (
-                supabase.table("journal_analysis")
-                .select("id")
-                .eq("journal_id", journal_id)
-                .limit(1)
-                .execute()
-            )
-
-            summary_text = "\n".join(analysis["summary"])
-
-            if existing_analysis.data:
-                supabase.table("journal_analysis").update({
-                    "summary_text": summary_text,
-                    "updated_at": now,
-                }).eq(
-                    "id",
-                    existing_analysis.data[0]["id"],
-                ).execute()
-            else:
-                supabase.table("journal_analysis").insert({
-                    "journal_id": journal_id,
-                    "summary_text": summary_text,
-                    "created_at": now,
-                }).execute()
-        else:
-            # 감정 기록이 없으면 분석 문장을 만들지 않는다.
-            analysis_pending = True
-
+        analysis_pending = summary_text is None
     except Exception:
         analysis_pending = True
         logger.exception(
             "Reflection saved but analysis failed: journal_id=%s",
             journal_id,
         )
-        
 
     return {
         "ok": True,
@@ -235,10 +234,6 @@ def create_daily_reflection(
         "analysis_pending": analysis_pending,
     }
 
-
-# ==============================
-# Daily Reflection Review
-# ==============================
 
 @router.get("/daily")
 def get_daily_reflection(
@@ -262,9 +257,7 @@ def get_daily_reflection(
     )
 
     if not journal_res.data:
-        return {
-            "exists": False,
-        }
+        return {"exists": False}
 
     journal = journal_res.data[0]
 
@@ -276,10 +269,11 @@ def get_daily_reflection(
         .execute()
     )
 
-    summary = None
-
-    if analysis_res.data:
-        summary = analysis_res.data[0]["summary_text"]
+    summary = (
+        analysis_res.data[0]["summary_text"]
+        if analysis_res.data
+        else None
+    )
 
     return {
         "exists": True,
@@ -288,6 +282,7 @@ def get_daily_reflection(
         "summary_text": summary,
         "created_at": journal["created_at"],
     }
+
 
 @router.post("/daily/{journal_id}/analysis")
 def regenerate_daily_reflection_analysis(
@@ -324,43 +319,18 @@ def regenerate_daily_reflection_analysis(
             detail="Today's reflection not found",
         )
 
-    mood_analysis = get_mood_analysis(
-        supabase=supabase,
-        user_id=user_id,
-        range_key="today",
-        tz_offset_min=tz_offset_min,
+    summary_text = save_reflection_analysis(
+        supabase,
+        user_id,
+        journal_id,
+        tz_offset_min,
     )
 
-    if not mood_analysis.points:
+    if summary_text is None:
         raise HTTPException(
             status_code=409,
             detail="Today's mood analysis is unavailable",
         )
-
-    analysis = build_reflection_analysis(mood_analysis)
-    summary_text = "\n".join(analysis["summary"])
-
-    existing = (
-        supabase.table("journal_analysis")
-        .select("id")
-        .eq("journal_id", journal_id)
-        .limit(1)
-        .execute()
-    )
-
-    now = datetime.utcnow().isoformat()
-
-    if existing.data:
-        supabase.table("journal_analysis").update({
-            "summary_text": summary_text,
-            "updated_at": now,
-        }).eq("id", existing.data[0]["id"]).execute()
-    else:
-        supabase.table("journal_analysis").insert({
-            "journal_id": journal_id,
-            "summary_text": summary_text,
-            "created_at": now,
-        }).execute()
 
     return {
         "ok": True,
