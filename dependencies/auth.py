@@ -1,13 +1,50 @@
-# weavemo-backend-mock/dependencies/auth.py
+# dependencies/auth.py
+
+import logging
+
+import httpx
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import (
+    HTTPBearer,
+    HTTPAuthorizationCredentials,
+)
 from jose import jwt, JWTError
-from httpx import ReadError
 
 from config.settings import settings
 from db.database import get_supabase
 
+
+logger = logging.getLogger(__name__)
 security = HTTPBearer()
+
+
+def fetch_user_rows(supabase, auth_uid: str):
+    # 읽기 요청만 연결 오류 발생 시 한 번 재시도한다.
+    for attempt in range(2):
+        try:
+            result = (
+                supabase.table("users")
+                .select(
+                    "id, plan, nickname, profile_image_url"
+                )
+                .eq("auth_uid", auth_uid)
+                .limit(1)
+                .execute()
+            )
+
+            return result.data or []
+
+        except (
+            httpx.TimeoutException,
+            httpx.NetworkError,
+            httpx.RemoteProtocolError,
+        ):
+            if attempt == 1:
+                raise
+
+            logger.warning(
+                "Auth user lookup connection failed; retrying once"
+            )
 
 
 def get_current_user(
@@ -38,36 +75,22 @@ def get_current_user(
             detail="Invalid token payload",
         )
 
-    # 1️⃣ users 테이블에서 auth_uid로 조회
     try:
-        res = (
-            supabase.table("users")
-            .select(
-                "id, plan, nickname, profile_image_url")
-            .eq("auth_uid", auth_uid)
-            .limit(1)
-            .execute()
-        )
-    except Exception as e:
-        print("🔥 supabase error:", e)
+        rows = fetch_user_rows(supabase, auth_uid)
+    except Exception:
+        logger.exception("Auth user lookup failed")
+
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Auth backend error",
+            detail="Auth backend unavailable",
         )
 
-    rows = res.data or []
-
-    # 2️⃣ 없으면 자동 생성 (Week 3 기준 허용)
     if rows:
-        user_id = rows[0]["id"]
-        plan = rows[0].get("plan")
-        nickname = rows[0].get("nickname")
-        profile_image_url = rows[0].get(
-            "profile_image_url"
-        )
+        user = rows[0]
     else:
+        # 생성 요청은 자동 재시도하지 않는다.
         try:
-            created = (
+            result = (
                 supabase.table("users")
                 .insert({
                     "auth_uid": auth_uid,
@@ -80,26 +103,27 @@ def get_current_user(
                 })
                 .execute()
             )
-        except Exception as e:
-            print("🔥 insert error:", e)
+
+            if not result.data:
+                raise RuntimeError(
+                    "User creation returned no user"
+                )
+
+            user = result.data[0]
+
+        except Exception:
+            logger.exception("Auth user creation failed")
+
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="User creation failed",
             )
-    
-        user_id = created.data[0]["id"]
-        plan = "free"
-        nickname = created.data[0].get(
-            "nickname"
-        )
-        profile_image_url = None
 
-    # 3️⃣ 내부 user 객체 반환 (BIGINT id!)
     return {
-        "user_id": user_id,   # ✅ DB에서 쓰는 ID
-        "auth_uid": auth_uid, # 참고용
+        "user_id": user["id"],
+        "auth_uid": auth_uid,
         "email": email,
-        "plan": plan,
-        "nickname": nickname,
-        "profile_image_url": profile_image_url,
+        "plan": user.get("plan") or "free",
+        "nickname": user.get("nickname"),
+        "profile_image_url": user.get("profile_image_url"),
     }
