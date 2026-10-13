@@ -211,3 +211,30 @@ def get_journal_count(
     return {
         "count": stats_res.data[0].get("total_journals", 0),
     }
+
+@router.get("/reflections")
+def list_weekly_reflections(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(12, ge=1, le=50),
+    current_user=Depends(get_current_user),
+):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+
+    result = (
+        supabase.table("journal_entries")
+        .select("id, date, content, created_at")
+        .eq("user_id", user_id)
+        .eq("type", "reflection")
+        .order("date", desc=True)
+        .order("id", desc=True)
+        .range(offset, offset + limit)
+        .execute()
+    )
+
+    rows = result.data or []
+
+    return {
+        "items": rows[:limit],
+        "has_more": len(rows) > limit,
+    }
