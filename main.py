@@ -5,6 +5,7 @@ from routers import auth, user, mood, stats, action, journal, badge, journal_ent
 from routers.posts import router as posts_router
 from routers.comments import router as comments_router
 from routers.comments_actions import router as comments_actions_router
+from routers.analysis_access import router as analysis_access_router
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from routers import rewards
@@ -53,3 +54,4 @@ app.include_router(comments_actions_router, prefix="/comments", tags=["comments"
 app.include_router(zen_art.router, prefix="/zen-art", tags=["zen-art"])
 app.include_router(capsule.router, prefix="/capsule", tags=["capsule"])
 app.include_router(collection.router, prefix="/collections", tags=["collections"])
+app.include_router(analysis_access_router)
