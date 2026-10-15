@@ -1,5 +1,3 @@
-#weavemo-backend-mock/routers/weekly_summaries.py
-
 from fastapi import APIRouter, Depends, Query
 
 from dependencies.auth import get_current_user
@@ -10,20 +8,42 @@ from postgrest.exceptions import APIError
 router = APIRouter()
 
 
+def _visible_weekly_summary(row: dict, is_premium: bool) -> dict:
+    if is_premium:
+        return row
+
+    # Whitelist basic fields so newly added premium fields are not exposed.
+    basic_fields = (
+        "week_start", "week_end", "avg_valence", "avg_energy",
+        "mood_checks", "journal_days", "points_gained", "points_possible",
+    )
+    result = {key: row[key] for key in basic_fields if key in row}
+    pattern = row.get("weekday_pattern")
+    if isinstance(pattern, list):
+        result["weekday_pattern"] = [
+            {key: item[key] for key in ("day", "valence", "energy") if key in item}
+            for item in pattern if isinstance(item, dict)
+        ]
+    else:
+        result["weekday_pattern"] = None
+    emotions = row.get("top_emotions")
+    result["top_emotions"] = [
+        {key: item[key] for key in ("code", "count") if key in item}
+        for item in emotions if isinstance(item, dict)
+    ] if isinstance(emotions, list) else []
+    return result
+
+
 @router.get("/weekly-summaries")
 def get_weekly_summary(
     week_start: str = Query(None),
     current_user=Depends(get_current_user),
 ):
     if week_start is None:
-        raise ValueError("Week_start is required") 
-    """
-    Frontend contract:
-    GET /weekly-summaries?week_start=YYYY-MM-DD
-    returns a single WeeklySummary object.
-    """
+        raise ValueError("Week_start is required")
     supabase = get_supabase()
     user_id = current_user["user_id"]
+    is_premium = current_user.get("plan") == "premium"
 
     res = (
         supabase.table("weekly_summaries")
@@ -37,42 +57,35 @@ def get_weekly_summary(
     rows = res.data or []
     if rows:
         row = rows[0]
-        # ✅ "빈 리포트"면 재계산해서 채우기 (최소 수정)
         is_empty = (
             row.get("weekday_pattern") is None
             and row.get("summary_text") is None
             and (row.get("mood_checks") in [None, 0])
         )
         if not is_empty:
-            return row
+            return _visible_weekly_summary(row, is_premium)
         payload = build_weekly_summary(
             supabase=supabase,
             user_id=user_id,
             week_start=week_start,
         )
-        # ✅ unique constraint 없어도 안전하게: id로 update
         supabase.table("weekly_summaries").upsert(payload, on_conflict="user_id,week_start").execute()
         res2 = supabase.table("weekly_summaries").select("*").eq("id", row["id"]).limit(1).execute()
-        return (res2.data or [payload])[0]
+        return _visible_weekly_summary((res2.data or [payload])[0], is_premium)
 
-    # 없으면 즉시 집계해서 생성 (Week 9: 최소 수정 자동 집계)
     payload = build_weekly_summary(
         supabase=supabase,
         user_id=user_id,
         week_start=week_start,
     )
 
-    # upsert by (user_id, week_start) — unique constraint가 없다면 insert로만 동작
-    # ✅ 없으면 생성 (중복이면 upsert로 흡수)
     try:
         supabase.table("weekly_summaries").upsert(payload, on_conflict="user_id,week_start").execute()
     except APIError as e:
-        # 혹시나 race condition 등으로 23505가 나도, 다시 select 해서 반환
         if getattr(e, "args", None) and isinstance(e.args[0], dict) and e.args[0].get("code") == "23505":
             pass
         else:
             raise
-    # 다시 조회해서 DB의 created_at 포함해서 반환
     res2 = (
         supabase.table("weekly_summaries")
         .select("*")
@@ -81,4 +94,4 @@ def get_weekly_summary(
         .limit(1)
         .execute()
     )
-    return (res2.data or [payload])[0]
+    return _visible_weekly_summary((res2.data or [payload])[0], is_premium)
