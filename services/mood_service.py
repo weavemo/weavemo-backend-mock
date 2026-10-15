@@ -22,7 +22,7 @@ from schemas.mood import (
 )
 
 # -------------------------
-# metrics 계산 (Week 9)
+# metrics 怨꾩궛 (Week 9)
 # -------------------------
 def _compute_metrics(points: List[MoodAnalysisPoint], tags_summary: List[MoodTagSummaryItem]) -> Dict[str, Any]:
     if not points:
@@ -35,17 +35,17 @@ def _compute_metrics(points: List[MoodAnalysisPoint], tags_summary: List[MoodTag
             "positive_ratio": 0.0,
             "dominant_tags": [t.code for t in tags_summary[:2]],
         }
-    # 평균
+    # ?됯퇏
     avg_valence = sum(p.mainValence for p in points) / len(points)
     avg_energy = sum(p.energy for p in points) / len(points)
 
-    # 단순 추세 (전반 vs 후반 평균)
+    # ?⑥닚 異붿꽭 (?꾨컲 vs ?꾨컲 ?됯퇏)
     half = len(points) // 2 or 1
     first_half = points[:half]
     second_half = points[half:]
 
     def _trend(first: List[MoodAnalysisPoint], second: List[MoodAnalysisPoint], key: str):
-        # second가 비면(예: points 1개) 추세는 flat으로 처리
+        # second媛 鍮꾨㈃(?? points 1媛? 異붿꽭??flat?쇰줈 泥섎━
         if not first or not second:
             return "flat"
         f = sum(getattr(p, key) for p in first) / len(first)
@@ -59,7 +59,7 @@ def _compute_metrics(points: List[MoodAnalysisPoint], tags_summary: List[MoodTag
     valence_trend = _trend(first_half, second_half, "mainValence")
     energy_trend = _trend(first_half, second_half, "energy")
 
-    # 변동성 (range 기반)
+    # 蹂?숈꽦 (range 湲곕컲)
     energies = [p.energy for p in points]
     energy_range = max(energies) - min(energies)
     if energy_range >= 3:
@@ -69,10 +69,10 @@ def _compute_metrics(points: List[MoodAnalysisPoint], tags_summary: List[MoodTag
     else:
         energy_volatility = "low"
 
-    # 분포
+    # 遺꾪룷
     positive_ratio = len([p for p in points if p.mainValence > 0]) / len(points)
 
-    # 지배 태그
+    # 吏諛??쒓렇
     dominant_tags = [t.code for t in tags_summary[:2]]
 
     return {
@@ -86,13 +86,13 @@ def _compute_metrics(points: List[MoodAnalysisPoint], tags_summary: List[MoodTag
     }
 
 # -------------------------
-# range → 날짜 범위 계산
+# range ???좎쭨 踰붿쐞 怨꾩궛
 # -------------------------
 
 
 
 # -------------------------
-# summary label 계산
+# summary label 怨꾩궛
 # -------------------------
 def _calc_summary_label(main_valence: int, energy: int) -> SummaryLabel:
     if main_valence == 0:
@@ -571,13 +571,13 @@ def _build_advice_codes(
         * 100
     )
 
-    # 기록이 아직 부족한 경우
+    # 湲곕줉???꾩쭅 遺議깊븳 寃쎌슦
     if consistency_score < 40:
         advice.append(
             "BUILD_CHECKIN_HABIT"
         )
 
-    # 에너지가 전반적으로 낮은 경우
+    # ?먮꼫吏媛 ?꾨컲?곸쑝濡???? 寃쎌슦
     if avg_energy <= 2:
         advice.append(
             "REST_PRIORITY"
@@ -590,7 +590,7 @@ def _build_advice_codes(
             "LIGHT_ACTIVITY"
         )
 
-    # 감정 또는 에너지 변화가 큰 경우
+    # 媛먯젙 ?먮뒗 ?먮꼫吏 蹂?붽? ??寃쎌슦
     if daily_insights:
         valence_values = [
             item.avg_valence
@@ -620,25 +620,25 @@ def _build_advice_codes(
                 "TRACK_DAILY_ROUTINE"
             )
 
-    # 반복되는 감정 원인이 있는 경우
+    # 諛섎났?섎뒗 媛먯젙 ?먯씤???덈뒗 寃쎌슦
     if dominant_trigger:
         advice.append(
             "REVIEW_DOMINANT_TRIGGER"
         )
 
-    # 불편한 감정 비중이 높은 경우
+    # 遺덊렪??媛먯젙 鍮꾩쨷???믪? 寃쎌슦
     if positive_ratio <= 0.3:
         advice.append(
             "GENTLE_RECOVERY"
         )
 
-    # 긍정적인 흐름이 많은 경우
+    # 湲띿젙?곸씤 ?먮쫫??留롮? 寃쎌슦
     elif positive_ratio >= 0.6:
         advice.append(
             "REPEAT_POSITIVE_PATTERN"
         )
 
-    # 이전 기간보다 감정과 에너지가 함께 좋아진 경우
+    # ?댁쟾 湲곌컙蹂대떎 媛먯젙怨??먮꼫吏媛 ?④퍡 醫뗭븘吏?寃쎌슦
     if (
         comparison.previous_available
         and comparison.avg_valence_delta
@@ -650,7 +650,7 @@ def _build_advice_codes(
             "KEEP_CURRENT_ROUTINE"
         )
 
-    # 중복 제거 후 최대 3개만 제공
+    # 以묐났 ?쒓굅 ??理쒕? 3媛쒕쭔 ?쒓났
     unique_advice = list(
         dict.fromkeys(advice)
     )
@@ -844,13 +844,13 @@ def get_mood_analysis(
     user_id: int,
     range_key: str,
     tz_offset_min: int,
+    include_period_insights: bool = False,
 ) -> MoodAnalysisResponse:
     utc_now = datetime.utcnow()
     local_now = utc_now + timedelta(minutes=tz_offset_min)
     local_today = local_now.date()
 
-    # ✅ range별 기간: today=오늘 하루, 7d=오늘 포함 7일, 30d=오늘 포함 30일
-    # end_local은 "내일 00:00"으로 고정해야 (7d/30d도) 기간 끝까지 포함됨.
+    # ??range蹂?湲곌컙: today=?ㅻ뒛 ?섎（, 7d=?ㅻ뒛 ?ы븿 7?? 30d=?ㅻ뒛 ?ы븿 30??    # end_local? "?댁씪 00:00"?쇰줈 怨좎젙?댁빞 (7d/30d?? 湲곌컙 ?앷퉴吏 ?ы븿??
     if range_key == "today":
         start_local = datetime.combine(local_today, datetime.min.time())
     elif range_key == "7d":
@@ -861,13 +861,13 @@ def get_mood_analysis(
         raise ValueError("Invalid range")
 
    # end_local = datetime.combine(local_today + timedelta(days=1), datetime.min.time())
-    # ✅ end는 항상 "내일 00:00 (local)"로 고정 (range가 달라도 오늘 끝까지 포함)
+    # ??end????긽 "?댁씪 00:00 (local)"濡?怨좎젙 (range媛 ?щ씪???ㅻ뒛 ?앷퉴吏 ?ы븿)
     end_local = datetime.combine(local_today + timedelta(days=1), datetime.min.time())
 
     start_utc = start_local - timedelta(minutes=tz_offset_min)
     end_utc = end_local - timedelta(minutes=tz_offset_min)
 
-    # 1️⃣ moods 조회 (네트워크/Supabase 오류 시에도 화면이 죽지 않게 빈 결과로 폴백)
+    # 1截뤴깵 moods 議고쉶 (?ㅽ듃?뚰겕/Supabase ?ㅻ쪟 ?쒖뿉???붾㈃??二쎌? ?딄쾶 鍮?寃곌낵濡??대갚)
     try:
         moods_res = (
             supabase.table("moods")
@@ -875,7 +875,7 @@ def get_mood_analysis(
             .eq("user_id", user_id)
             .gte("recorded_at", start_utc.isoformat())
         #    .lte("recorded_at", end_utc.isoformat())
-            # ✅ 경계 중복/누락 방지: end는 미만(<)이 가장 안전
+            # ??寃쎄퀎 以묐났/?꾨씫 諛⑹?: end??誘몃쭔(<)??媛???덉쟾
             .lt("recorded_at", end_utc.isoformat())
             .order("recorded_at", desc=False)
             .execute()
@@ -901,11 +901,11 @@ def get_mood_analysis(
         Dict[str, Any]
     ] = []
 
-    # today에서는 None,
-    # 7d와 30d에서는 아래에서 분석 결과를 넣음
+    # today?먯꽌??None,
+    # 7d? 30d?먯꽌???꾨옒?먯꽌 遺꾩꽍 寃곌낵瑜??ｌ쓬
     period_insights = None
 
-    if period_days is not None:
+    if include_period_insights and period_days is not None:
         previous_end_utc = start_utc
         previous_start_utc = (
             previous_end_utc
@@ -954,8 +954,8 @@ def get_mood_analysis(
         except Exception:
             previous_moods = []
 
-    # 기록이 없는 경우
-    # today, 7d, 30d 모두 여기에서 처리
+    # 湲곕줉???녿뒗 寃쎌슦
+    # today, 7d, 30d 紐⑤몢 ?ш린?먯꽌 泥섎━
     if not moods:
         return MoodAnalysisResponse(
             range=range_key,
@@ -980,13 +980,13 @@ def get_mood_analysis(
             todayMoodNotes=[],
             periodInsights=(
                 MoodPeriodInsights()
-                if period_days is not None
+                if include_period_insights and period_days is not None
                 else None
             ),
         )
 
-    # 7일·30일 전문 분석
-    if period_days is not None:
+    # 7?셋?0???꾨Ц 遺꾩꽍
+    if include_period_insights and period_days is not None:
         period_insights = (
             _build_period_insights(
                 moods=moods,
@@ -995,7 +995,7 @@ def get_mood_analysis(
             )
         )
 
-    # 2️⃣ points 생성 (raw mood = 1 point)
+    # 2截뤴깵 points ?앹꽦 (raw mood = 1 point)
     points = [
         MoodAnalysisPoint(
             date=m["date"],
@@ -1006,8 +1006,8 @@ def get_mood_analysis(
         for m in moods
     ]
 
-    # 3️⃣ summary 계산
-    # 기준: 마지막 날짜 mood (today / 기간 마지막)
+    # 3截뤴깵 summary 怨꾩궛
+    # 湲곗?: 留덉?留??좎쭨 mood (today / 湲곌컙 留덉?留?
     base = moods[-1]
     has_note = bool(
         str(base.get("note") or "").strip()
@@ -1033,7 +1033,7 @@ def get_mood_analysis(
         hasNote=has_note,
     )
 
-    # 4️⃣ tags summary
+    # 4截뤴깵 tags summary
     mood_ids = [m["id"] for m in moods]
 
     tags_res = (
@@ -1049,7 +1049,7 @@ def get_mood_analysis(
         if not tag_obj:
             continue
 
-        # supabase join 결과가 dict일 수도, list일 수도 있어서 둘 다 처리
+        # supabase join 寃곌낵媛 dict???섎룄, list???섎룄 ?덉뼱??????泥섎━
         if isinstance(tag_obj, list):
             for t in tag_obj:
                 code = t.get("code") if isinstance(t, dict) else None
@@ -1067,7 +1067,7 @@ def get_mood_analysis(
         for code, count in sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
     ]
 
-    # 5️⃣ todayMood (today range only)
+    # 5截뤴깵 todayMood (today range only)
     today_mood = None
     if range_key == "today":
         today_mood = TodayMoodInfo(
