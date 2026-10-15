@@ -1,26 +1,116 @@
 # routers/journal_entries.py
 
-from fastapi import APIRouter, Depends, Query, Body, Header
+from fastapi import (
+    APIRouter,
+    Depends,
+    Query,
+    Body,
+    Header,
+    HTTPException,
+)
 from datetime import date, datetime
 from dependencies.auth import get_current_user
 from db.database import get_supabase
 
 router = APIRouter()
 
+def validate_owned_card_background(
+    supabase,
+    auth_uid: str,
+    background_key: str | None,
+) -> str | None:
+    if background_key is None:
+        return None
+
+    key = background_key.strip()
+
+    if not key:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid background key",
+        )
+
+    reward_res = (
+        supabase.table("reward_items")
+        .select("id, reward_types(key)")
+        .eq("key", key)
+        .limit(1)
+        .execute()
+    )
+
+    reward = (
+        reward_res.data[0]
+        if reward_res.data
+        else None
+    )
+
+    reward_type = (
+        reward.get("reward_types")
+        if reward
+        else None
+    )
+
+    if (
+        not isinstance(reward_type, dict)
+        or reward_type.get("key") != "card_background"
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid card background reward",
+        )
+
+    inventory_res = (
+        supabase.table("user_reward_inventory")
+        .select("reward_item_id")
+        .eq("user_id", auth_uid)
+        .eq("reward_item_id", reward["id"])
+        .limit(1)
+        .execute()
+    )
+
+    if not inventory_res.data:
+        raise HTTPException(
+            status_code=403,
+            detail="Card background not owned",
+        )
+
+    return key
 
 @router.post("")
 def create_journal_entry(
     content: str = Body(None),
     date: date = Body(None),
     type: str = Body(None),
+    background_reward_key: str | None = Body(None),
+    mood_valence: float | None = Body(
+        None,
+        ge=-2,
+        le=2,
+        allow_inf_nan=False,
+    ),
+    mood_energy: float | None = Body(
+        None,
+        ge=1,
+        le=5,
+        allow_inf_nan=False,
+    ),
     tz_offset_min: int = Header(0),
     current_user=Depends(get_current_user),
 ):
     if content is None or date is None or type is None:
-        raise ValueError("content, date, type required")
+        raise HTTPException(
+            status_code=400,
+            detail="content, date, type required",
+        )
 
     supabase = get_supabase()
     user_id = current_user["user_id"]
+
+    background_key = validate_owned_card_background(
+        supabase,
+        current_user["auth_uid"],
+        background_reward_key,
+    )
 
     supabase.table("journal_entries").insert({
         "user_id": user_id,
@@ -28,6 +118,9 @@ def create_journal_entry(
         "date": date.isoformat(),
         "type": type,
         "created_at": datetime.utcnow().isoformat(),
+        "background_reward_key": background_key,
+        "mood_valence": mood_valence,
+        "mood_energy": mood_energy,
     }).execute()
 
     return {"ok": True}
