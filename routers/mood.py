@@ -131,6 +131,7 @@ def get_analysis(
             user_id=user_id,
             range_key=range_key,
             tz_offset_min=tz_offset_min,
+            include_period_insights=is_premium,
         )
 
         if range_key == "7d" and not is_premium:
