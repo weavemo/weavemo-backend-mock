@@ -3,7 +3,8 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
-
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from fastapi import APIRouter, Depends, HTTPException, Query, Header, status
 
 from db.database import get_supabase
@@ -104,13 +105,19 @@ def get_analysis(
     supabase=Depends(get_supabase),
     current_user=Depends(get_current_user),
 ):
-    """
-    Week 4:
-    - range: today | 7d | 30d
-    - 분석은 집계 기반 (AI ❌)
-    """
-
     user_id: int = current_user["user_id"]
+    range_key = range.strip().lower()
+    is_premium = current_user.get("plan") == "premium"
+
+    # 무료 사용자의 30일 요청은 분석 실행 전에 차단한다.
+    if range_key == "30d" and not is_premium:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "SUBSCRIPTION_REQUIRED",
+                "feature": "monthly_analysis",
+            },
+        )
 
     try:
         print("[mood/analysis] range=", repr(range))
@@ -119,12 +126,36 @@ def get_analysis(
             get_mood_analysis.__code__.co_filename,
         )
 
-        return get_mood_analysis(
+        result = get_mood_analysis(
             supabase=supabase,
             user_id=user_id,
-            range_key=range.strip().lower(),
+            range_key=range_key,
             tz_offset_min=tz_offset_min,
         )
+
+        if range_key == "7d" and not is_premium:
+            # 기존 응답 모델로 검증한 후 구독용 필드를 제외한다.
+            validated = MoodAnalysisResponse.model_validate(result)
+
+            content = jsonable_encoder(
+                validated,
+                by_alias=True,
+                exclude={
+                    "periodInsights",
+                    "period_insights",
+                },
+            )
+
+            # 응답 모델의 기본값으로 제외한 필드가 다시 붙지 않도록 한다.
+            content.pop("periodInsights", None)
+            content.pop("period_insights", None)
+
+            return JSONResponse(content=content)
+
+        return result
+
+    except HTTPException:
+        raise
 
     except ValueError as e:
         print("[mood/analysis] ValueError:", repr(e))
