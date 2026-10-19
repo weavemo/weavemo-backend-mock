@@ -22,6 +22,103 @@ bearer = HTTPBearer()
 
 router = APIRouter()
 
+class EquippedBadgeRequest(BaseModel):
+    code: str | None = None
+
+
+def validate_owned_badge(supabase, user_id: int, code: str):
+    badge_res = (
+        supabase.table("badges")
+        .select("id")
+        .eq("code", code)
+        .limit(1)
+        .execute()
+    )
+
+    if not badge_res.data:
+        raise HTTPException(
+            status_code=400,
+            detail="Unknown badge",
+        )
+
+    owned_res = (
+        supabase.table("user_badges")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("badge_id", badge_res.data[0]["id"])
+        .limit(1)
+        .execute()
+    )
+
+    if not owned_res.data:
+        raise HTTPException(
+            status_code=403,
+            detail="Badge not owned",
+        )
+
+
+@router.get("/equipped-badge")
+def get_equipped_badge(
+    current_user=Depends(get_current_user),
+):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+
+    result = (
+        supabase.table("user_stats")
+        .select("equipped_badge")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    stats = result.data[0] if result.data else {}
+    code = stats.get("equipped_badge")
+
+    if code:
+        try:
+            validate_owned_badge(supabase, user_id, code)
+        except HTTPException as error:
+            if error.status_code not in (400, 403):
+                raise
+            code = None
+
+    return {"badge": code}
+
+
+@router.put("/equipped-badge")
+def update_equipped_badge(
+    body: EquippedBadgeRequest,
+    current_user=Depends(get_current_user),
+):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+
+    code = body.code.strip() if body.code is not None else None
+
+    if code == "":
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid badge code",
+        )
+
+    if code is not None:
+        validate_owned_badge(supabase, user_id, code)
+
+    result = (
+        supabase.table("user_stats")
+        .update({"equipped_badge": code})
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+    if not result.data:
+        raise HTTPException(
+            status_code=404,
+            detail="User stats not found",
+        )
+
+    return {"badge": code}
 
 class FrameUpdateRequest(BaseModel):
     frame: Optional[str] = None
