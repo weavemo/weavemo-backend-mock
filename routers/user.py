@@ -148,7 +148,36 @@ def get_my_profile(
             credentials.credentials
         )
         auth_user = auth_response.user
+        
     except Exception as error:
+        error_code = getattr(error, "code", None)
+        error_status = getattr(error, "status", None)
+
+        session_error_codes = {
+            "session_not_found",
+            "session_expired",
+            "refresh_token_not_found",
+            "refresh_token_already_used",
+            "bad_jwt",
+        }
+
+        # 현재 확인된 Supabase 오류 문구도 대응
+        missing_session = (
+            "session from session_id claim in jwt does not exist"
+            in str(error).lower()
+        )
+
+        if (
+            error_code in session_error_codes
+            or str(error_status) == "401"
+            or missing_session
+        ):
+            raise HTTPException(
+                status_code=401,
+                detail="session_expired",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from error
+
         print(
             "[user/me] Supabase auth lookup failed:",
             type(error).__name__,
