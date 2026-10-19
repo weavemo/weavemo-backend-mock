@@ -149,17 +149,17 @@ def get_my_profile(
         )
         auth_user = auth_response.user
     except Exception as error:
-    print(
-        "[user/me] Supabase auth lookup failed:",
-        type(error).__name__,
-        str(error),
-        flush=True,
-    )
+        print(
+            "[user/me] Supabase auth lookup failed:",
+            type(error).__name__,
+            str(error),
+            flush=True,
+        )
 
-    raise HTTPException(
-        status_code=503,
-        detail="Could not verify account email",
-    ) from error
+        raise HTTPException(
+            status_code=503,
+            detail="Could not verify account email",
+        ) from error
 
     if not auth_user or auth_user.id != current_user["auth_uid"]:
         raise HTTPException(
