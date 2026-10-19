@@ -3,6 +3,8 @@ from datetime import date, datetime
 from math import isfinite
 from dependencies.auth import get_current_user
 from db.database import get_supabase
+from uuid import UUID
+from services.journal_entry_save import insert_journal_entry
 
 router = APIRouter()
 
@@ -38,20 +40,28 @@ def create_journal_entry(
     background_reward_key: str | None = Body(None),
     mood_valence: float | None = Body(None, ge=-2, le=2, allow_inf_nan=False),
     mood_energy: float | None = Body(None, ge=1, le=5, allow_inf_nan=False),
+    client_request_id: UUID | None = Body(None),
     tz_offset_min: int = Header(0),
     current_user=Depends(get_current_user),
 ):
     if content is None or date is None or type is None:
         raise HTTPException(status_code=400, detail="content, date, type required")
+    if type == "gratitude" and not 10 <= len(content.strip()) <= 300:
+        raise HTTPException(status_code=400, detail="Gratitude content must be 10 to 300 characters")
     supabase = get_supabase()
     user_id = current_user["user_id"]
-    background_key = validate_owned_card_background(supabase, current_user["auth_uid"], background_reward_key)
-    supabase.table("journal_entries").insert({
+    background_key = validate_owned_card_background(
+        supabase, current_user["auth_uid"], background_reward_key
+    )
+    payload = {
         "user_id": user_id, "content": content, "date": date.isoformat(), "type": type,
         "created_at": datetime.utcnow().isoformat(),
-        "background_reward_key": background_key, "mood_valence": mood_valence, "mood_energy": mood_energy,
-    }).execute()
-    return {"ok": True}
+        "background_reward_key": background_key,
+        "mood_valence": mood_valence, "mood_energy": mood_energy,
+    }
+    if client_request_id is not None:
+        payload["client_request_id"] = str(client_request_id)
+    return insert_journal_entry(supabase, payload)
 
 
 @router.post("/reflection")
