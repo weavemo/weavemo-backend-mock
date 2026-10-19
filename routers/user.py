@@ -17,6 +17,8 @@ from uuid import uuid4
 import httpx
 from config.settings import settings
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from datetime import time as TimeValue
+from typing import Literal
 
 bearer = HTTPBearer()
 
@@ -125,6 +127,12 @@ class FrameUpdateRequest(BaseModel):
 
 class ProfileUpdateRequest(BaseModel):
     nickname: Optional[str] = None
+    locale: Optional[Literal["ko-KR", "en-US"]] = None
+    notifTimeAm: Optional[TimeValue] = None
+    notifTimePm: Optional[TimeValue] = None
+    appearance: Optional[
+        Literal["light", "dark", "system"]
+    ] = None
 
 
 @router.get("/me")
@@ -171,6 +179,15 @@ def get_my_profile(
     )
 
     stats = stats_res.data[0] if stats_res.data else {}
+    settings_res = (
+        supabase.table("users")
+        .select("locale, notif_time_am, notif_time_pm, appearance")
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+    )
+    
+    settings = settings_res.data[0] if settings_res.data else {}
 
     return {
         "user": {
@@ -179,6 +196,10 @@ def get_my_profile(
             "level": stats.get("level", 1),
             "xp": stats.get("xp", 0),
             "equipped_frame": stats.get("equipped_frame"),
+            "locale": settings.get("locale") or "ko-KR",
+            "notifTimeAm": settings.get("notif_time_am"),
+            "notifTimePm": settings.get("notif_time_pm"),
+            "appearance": settings.get("appearance") or "system",
         }
     }
 
@@ -224,40 +245,73 @@ def update_profile(
     current_user=Depends(get_current_user),
 ):
     supabase = get_supabase()
+    user_id = current_user["user_id"]
 
-    user_id = current_user.get(
-        "user_id"
-    )
+    # Pydantic v1/v2 모두 지원
+    if hasattr(body, "model_dump"):
+        supplied = body.model_dump(exclude_unset=True)
+    else:
+        supplied = body.dict(exclude_unset=True)
 
-    if not user_id:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid user",
-        )
+    changes = {}
 
-    nickname = (
-        body.nickname.strip()
-        if body.nickname
-        else None
-    )
+    if "nickname" in supplied:
+        nickname = (body.nickname or "").strip()
 
-    if not nickname:
+        if not nickname:
+            raise HTTPException(
+                status_code=400,
+                detail="Nickname is required",
+            )
+
+        if len(nickname) > 30:
+            raise HTTPException(
+                status_code=400,
+                detail="Nickname is too long",
+            )
+
+        changes["nickname"] = nickname
+
+    for field in ("locale", "appearance"):
+        if field in supplied:
+            value = supplied[field]
+
+            if value is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{field} cannot be null",
+                )
+
+            changes[field] = value
+
+    for request_field, column in (
+        ("notifTimeAm", "notif_time_am"),
+        ("notifTimePm", "notif_time_pm"),
+    ):
+        if request_field in supplied:
+            value = supplied[request_field]
+
+            if value is not None and value.tzinfo is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Notification time must not include timezone",
+                )
+
+            changes[column] = (
+                value.isoformat()
+                if value is not None
+                else None
+            )
+
+    if not changes:
         raise HTTPException(
             status_code=400,
-            detail="Nickname is required",
-        )
-
-    if len(nickname) > 30:
-        raise HTTPException(
-            status_code=400,
-            detail="Nickname is too long",
+            detail="No profile changes supplied",
         )
 
     result = (
         supabase.table("users")
-        .update({
-            "nickname": nickname,
-        })
+        .update(changes)
         .eq("id", user_id)
         .execute()
     )
@@ -268,25 +322,20 @@ def update_profile(
             detail="User not found",
         )
 
-    updated_user = result.data[0]
+    updated = result.data[0]
 
     return {
-        "id": updated_user.get(
-            "id"
+        "id": updated.get("id"),
+        "email": updated.get(
+            "email", current_user.get("email")
         ),
-        "email": updated_user.get(
-            "email",
-            current_user.get("email"),
-        ),
-        "nickname": updated_user.get(
-            "nickname"
-        ),
-        "profile_image_url":
-            updated_user.get(
-                "profile_image_url"
-            ),
+        "nickname": updated.get("nickname"),
+        "profile_image_url": updated.get("profile_image_url"),
+        "locale": updated.get("locale") or "ko-KR",
+        "notifTimeAm": updated.get("notif_time_am"),
+        "notifTimePm": updated.get("notif_time_pm"),
+        "appearance": updated.get("appearance") or "system",
     }
-
 @router.post("/profile/image")
 async def upload_profile_image(
     request: Request,
