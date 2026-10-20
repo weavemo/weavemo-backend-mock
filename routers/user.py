@@ -347,7 +347,7 @@ def update_profile(
                 else None
             )
 
-     if "notificationTimezone" in supplied:
+    if "notificationTimezone" in supplied:
         raw_timezone = supplied["notificationTimezone"]
 
         if not isinstance(raw_timezone, str):
