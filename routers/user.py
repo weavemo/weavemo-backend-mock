@@ -8,6 +8,7 @@ from fastapi import (
     Request,
     UploadFile,
 )
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import BaseModel
 from dependencies.auth import get_current_user
 from db.database import get_supabase
@@ -130,6 +131,7 @@ class ProfileUpdateRequest(BaseModel):
     locale: Optional[Literal["ko-KR", "en-US"]] = None
     notifTimeAm: Optional[TimeValue] = None
     notifTimePm: Optional[TimeValue] = None
+    notificationTimezone: Optional[str] = None
     appearance: Optional[
         Literal["light", "dark", "system"]
     ] = None
@@ -217,7 +219,10 @@ def get_my_profile(
     stats = stats_res.data[0] if stats_res.data else {}
     settings_res = (
         supabase.table("users")
-        .select("locale, notif_time_am, notif_time_pm, appearance")
+        .select(
+            "locale, notif_time_am, notif_time_pm, "
+            "appearance, notification_timezone"
+        )
         .eq("id", user_id)
         .limit(1)
         .execute()
@@ -235,6 +240,9 @@ def get_my_profile(
             "locale": settings.get("locale") or "ko-KR",
             "notifTimeAm": settings.get("notif_time_am"),
             "notifTimePm": settings.get("notif_time_pm"),
+            "notificationTimezone": settings.get(
+                "notification_timezone"
+            ),
             "appearance": settings.get("appearance") or "system",
         }
     }
@@ -339,6 +347,33 @@ def update_profile(
                 else None
             )
 
+     if "notificationTimezone" in supplied:
+        raw_timezone = supplied["notificationTimezone"]
+
+        if not isinstance(raw_timezone, str):
+            raise HTTPException(
+                status_code=400,
+                detail="Notification timezone is required",
+            )
+
+        timezone_name = raw_timezone.strip()
+
+        if not timezone_name or len(timezone_name) > 100:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid notification timezone",
+            )
+
+        try:
+            ZoneInfo(timezone_name)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid notification timezone",
+            )
+
+        changes["notification_timezone"] = timezone_name
+        
     if not changes:
         raise HTTPException(
             status_code=400,
@@ -370,6 +405,9 @@ def update_profile(
         "locale": updated.get("locale") or "ko-KR",
         "notifTimeAm": updated.get("notif_time_am"),
         "notifTimePm": updated.get("notif_time_pm"),
+        "notificationTimezone": updated.get(
+            "notification_timezone"
+        ),
         "appearance": updated.get("appearance") or "system",
     }
 @router.post("/profile/image")
