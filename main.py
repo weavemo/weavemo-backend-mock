@@ -9,6 +9,7 @@ from routers.analysis_access import router as analysis_access_router
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from routers import rewards
+from routers import notifications
 
 app = FastAPI()
 
@@ -55,3 +56,8 @@ app.include_router(zen_art.router, prefix="/zen-art", tags=["zen-art"])
 app.include_router(capsule.router, prefix="/capsule", tags=["capsule"])
 app.include_router(collection.router, prefix="/collections", tags=["collections"])
 app.include_router(analysis_access_router)
+app.include_router(
+    notifications.router,
+    prefix="/notifications",
+    tags=["Notifications"],
+)
