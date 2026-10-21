@@ -14,6 +14,48 @@ from services.push_sender import (
 )
 
 
+def save_inbox_notification(
+    supabase,
+    user_id: int,
+    due: dict,
+    payload: dict,
+) -> bool:
+    try:
+        (
+            supabase.table("user_notifications")
+            .insert({
+                "user_id": user_id,
+                "kind": due["notification_kind"],
+                "local_date": due["local_date"],
+                "title": payload["title"],
+                "body": payload["body"],
+                "target_path": payload["url"],
+            })
+            .execute()
+        )
+
+        print(
+            f"Inbox saved: "
+            f"{due['notification_kind']} "
+            f"{due['local_date']}",
+            flush=True,
+        )
+        return True
+
+    except Exception as error:
+        if str(getattr(error, "code", "")) == "23505":
+            # 다른 기기 또는 이전 실행에서 이미 저장한 알림이다.
+            # 읽음 상태를 보존하기 위해 덮어쓰지 않는다.
+            return True
+
+        print(
+            "Inbox save failed:",
+            type(error).__name__,
+            flush=True,
+        )
+        return False
+
+
 def process_subscription(subscription_id: int) -> None:
     supabase = get_supabase()
 
@@ -50,8 +92,25 @@ def process_subscription(subscription_id: int) -> None:
     due_notifications = get_due_notifications(user)
 
     for due in due_notifications:
-        # 여러 실행 프로세스가 있어도 DB 고유 제약으로
-        # 같은 날짜·종류·기기의 발송 권한은 한 번만 확보한다.
+        payload = get_reminder_payload(
+            kind=due["notification_kind"],
+            locale=user.get("locale") or "ko-KR",
+            local_date=due["local_date"],
+        )
+
+        # 푸시 발송 여부와 별개로 알림함에 먼저 저장한다.
+        # 저장 실패 시 이번 회차에서는 보내지 않고,
+        # 다음 회차에서 예약 허용 시간 안에 다시 시도한다.
+        inbox_saved = save_inbox_notification(
+            supabase,
+            user["id"],
+            due,
+            payload,
+        )
+
+        if not inbox_saved:
+            continue
+
         try:
             claim_result = (
                 supabase.table("notification_deliveries")
@@ -67,7 +126,7 @@ def process_subscription(subscription_id: int) -> None:
             )
         except Exception as error:
             if str(getattr(error, "code", "")) == "23505":
-                # 이미 처리한 알림이므로 다시 보내지 않는다.
+                # 오늘 이 기기에 이미 시도한 종류는 다시 보내지 않는다.
                 continue
 
             print(
@@ -78,19 +137,15 @@ def process_subscription(subscription_id: int) -> None:
             continue
 
         if not claim_result.data:
-            # 기록 확보를 확인하지 못하면 발송하지 않는다.
-            print("Delivery claim was not confirmed.", flush=True)
+            print(
+                "Delivery claim was not confirmed.",
+                flush=True,
+            )
             continue
 
         delivery_id = claim_result.data[0]["id"]
 
         try:
-            payload = get_reminder_payload(
-                kind=due["notification_kind"],
-                locale=user.get("locale") or "ko-KR",
-                local_date=due["local_date"],
-            )
-
             status, http_status = send_push(
                 subscription,
                 payload,
@@ -119,8 +174,7 @@ def process_subscription(subscription_id: int) -> None:
                 .execute()
             )
         except Exception as error:
-            # 결과 저장 실패 시 claimed 기록을 유지한다.
-            # 접수됐을 수 있는 알림을 중복 발송하지 않는다.
+            # 접수됐을 수 있는 알림은 다시 보내지 않는다.
             print(
                 "Delivery result save failed:",
                 type(error).__name__,
@@ -137,15 +191,18 @@ def process_subscription(subscription_id: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+
     parser.add_argument(
         "--subscription-id",
         type=int,
         required=True,
     )
+
     parser.add_argument(
         "--once",
         action="store_true",
     )
+
     args = parser.parse_args()
 
     if args.subscription_id < 1:
@@ -154,7 +211,6 @@ def main() -> None:
     if not settings.VAPID_SUBJECT:
         raise ValueError("VAPID_SUBJECT is missing")
 
-    # 실행 전에 키 설정을 검사한다.
     get_encoded_private_key()
 
     print(
@@ -168,7 +224,9 @@ def main() -> None:
             started = time.monotonic()
 
             try:
-                process_subscription(args.subscription_id)
+                process_subscription(
+                    args.subscription_id
+                )
             except Exception as error:
                 print(
                     "Notification cycle failed:",
@@ -177,15 +235,20 @@ def main() -> None:
                 )
 
             if args.once:
-                print("Notification check completed.", flush=True)
+                print(
+                    "Notification check completed.",
+                    flush=True,
+                )
                 break
 
-            # 한 번의 조회가 느려져도 실행이 겹치지 않는다.
             elapsed = time.monotonic() - started
             time.sleep(max(1, 20 - elapsed))
 
     except KeyboardInterrupt:
-        print("\nNotification worker stopped.", flush=True)
+        print(
+            "\nNotification worker stopped.",
+            flush=True,
+        )
 
 
 if __name__ == "__main__":
