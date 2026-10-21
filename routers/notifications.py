@@ -202,3 +202,179 @@ def unregister_subscription(
         ) from None
 
     return {"removed": True}
+
+# routers/notifications.py
+# 기존 코드 맨 아래에 추가
+
+from datetime import datetime, timezone
+from fastapi import Query
+
+
+@router.get("/inbox")
+def get_notification_inbox(
+    limit: int = Query(default=20, ge=1, le=50),
+    before_id: int | None = Query(default=None, ge=1),
+    current_user=Depends(get_current_user),
+):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+
+    try:
+        query = (
+            supabase.table("user_notifications")
+            .select(
+                "id, kind, title, body, target_path, "
+                "local_date, created_at, read_at"
+            )
+            .eq("user_id", user_id)
+            .order("id", desc=True)
+            .limit(limit + 1)
+        )
+
+        if before_id is not None:
+            query = query.lt("id", before_id)
+
+        result = query.execute()
+        rows = result.data or []
+
+        has_more = len(rows) > limit
+        items = rows[:limit]
+
+        return {
+            "items": items,
+            "next_cursor": (
+                items[-1]["id"]
+                if has_more and items
+                else None
+            ),
+        }
+
+    except Exception as error:
+        logger.error(
+            "Notification inbox load failed: %s",
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load notification inbox",
+        ) from None
+
+
+@router.get("/inbox/unread-count")
+def get_notification_unread_count(
+    current_user=Depends(get_current_user),
+):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+
+    try:
+        result = (
+            supabase.table("user_notifications")
+            .select("id", count="exact", head=True)
+            .eq("user_id", user_id)
+            .is_("read_at", "null")
+            .execute()
+        )
+
+        return {"count": result.count or 0}
+
+    except Exception as error:
+        logger.error(
+            "Notification unread count failed: %s",
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load unread count",
+        ) from None
+
+
+@router.patch("/inbox/{notification_id}/read")
+def mark_notification_read(
+    notification_id: int,
+    current_user=Depends(get_current_user),
+):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+
+    if notification_id < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid notification ID",
+        )
+
+    try:
+        existing_result = (
+            supabase.table("user_notifications")
+            .select("id, read_at")
+            .eq("id", notification_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+
+        if not existing_result.data:
+            raise HTTPException(
+                status_code=404,
+                detail="Notification not found",
+            )
+
+        existing = existing_result.data[0]
+
+        if existing.get("read_at") is not None:
+            return {
+                "id": existing["id"],
+                "read_at": existing["read_at"],
+            }
+
+        # 다른 요청이 먼저 읽음 처리했다면 시간을 덮어쓰지 않는다.
+        updated_result = (
+            supabase.table("user_notifications")
+            .update({
+                "read_at": datetime.now(
+                    timezone.utc
+                ).isoformat(),
+            })
+            .eq("id", notification_id)
+            .eq("user_id", user_id)
+            .is_("read_at", "null")
+            .execute()
+        )
+
+        if updated_result.data:
+            updated = updated_result.data[0]
+
+            return {
+                "id": updated["id"],
+                "read_at": updated["read_at"],
+            }
+
+        latest_result = (
+            supabase.table("user_notifications")
+            .select("id, read_at")
+            .eq("id", notification_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+
+        if not latest_result.data:
+            raise HTTPException(
+                status_code=404,
+                detail="Notification not found",
+            )
+
+        return latest_result.data[0]
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        logger.error(
+            "Notification read update failed: %s",
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Could not mark notification as read",
+        ) from None
