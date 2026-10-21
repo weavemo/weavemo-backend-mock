@@ -188,6 +188,30 @@ def process_subscription(subscription_id: int) -> None:
             flush=True,
         )
 
+        if status == "expired":
+            try:
+                (
+                    supabase.table("push_subscriptions")
+                    .delete()
+                    .eq("id", subscription["id"])
+                    .eq("user_id", subscription["user_id"])
+                    .execute()
+                )
+
+                print(
+                    f"Expired subscription removed: "
+                    f"{subscription['id']}",
+                    flush=True,
+                )
+
+                return
+
+            except Exception as error:
+                print(
+                    "Expired subscription cleanup failed:",
+                    type(error).__name__,
+                    flush=True,
+                )
 
 def main() -> None:
     parser = argparse.ArgumentParser()
