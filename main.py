@@ -1,4 +1,6 @@
 # main.py
+
+from routers import friends
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import auth, user, mood, stats, action, journal, badge, journal_entries, weekly_summaries, zen_art, capsule, collection
@@ -60,4 +62,9 @@ app.include_router(
     notifications.router,
     prefix="/notifications",
     tags=["Notifications"],
+)
+app.include_router(
+    friends.router,
+    prefix="/friends",
+    tags=["Friends"],
 )
