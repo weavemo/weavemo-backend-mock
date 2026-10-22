@@ -12,6 +12,7 @@ from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from routers import rewards
 from routers import notifications
+from routers import onboarding
 
 app = FastAPI()
 
@@ -67,4 +68,9 @@ app.include_router(
     friends.router,
     prefix="/friends",
     tags=["Friends"],
+)
+app.include_router(
+    onboarding.router,
+    prefix="/user",
+    tags=["Onboarding"],
 )
