@@ -5,7 +5,14 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from supabase_auth.errors import AuthApiError
 
-from schemas.auth import LoginRequest, RegisterRequest, AuthResponse
+from schemas.auth import (
+    LoginRequest,
+    RegisterRequest,
+    RegisterResponse,
+    AuthResponse,
+)
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from db.database import get_supabase as get_database_supabase
 from core.supabase import get_supabase
 from dependencies.auth import get_current_user
 from config.settings import settings
@@ -26,40 +33,151 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
-@router.post("/register", response_model=AuthResponse)
+@router.post("/register", response_model=RegisterResponse)
 def register(body: RegisterRequest):
+    email = body.email.strip()
+    nickname = body.nickname.strip()
+    notification_timezone = body.notificationTimezone.strip()
+
+    if not email or "@" not in email:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid email",
+        )
+
+    if not nickname:
+        raise HTTPException(
+            status_code=400,
+            detail="Nickname is required",
+        )
+
+    if len(body.password) < 6:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 6 characters",
+        )
+
+    try:
+        ZoneInfo(notification_timezone)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid notification timezone",
+        )
+
     supabase = get_supabase()
 
     try:
         res = supabase.auth.sign_up({
-            "email": body.email,
+            "email": email,
             "password": body.password,
             "options": {
                 "data": {
-                    "nickname": body.nickname,
+                    "nickname": nickname,
+                    "locale": body.locale,
+                    "notification_timezone": notification_timezone,
                 }
             },
         })
-    except AuthApiError as e:
+    except AuthApiError as error:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+            status_code=400,
+            detail=str(error),
+        ) from error
 
-    if not res.user or not res.session:
+    if not res.user:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=400,
             detail="Registration failed",
         )
 
+    # 중복 가입 시 Supabase가 돌려주는 가상 응답으로
+    # 기존 사용자의 프로필을 변경하지 않는다.
+    identities = getattr(res.user, "identities", None)
+
+    if not res.session and not identities:
+        return {
+            "confirmationRequired": True,
+        }
+
+    # 인증 클라이언트와 분리된 DB 클라이언트를 사용한다.
+    database = get_database_supabase()
+
+    try:
+        existing_result = (
+            database.table("users")
+            .select("id")
+            .eq("auth_uid", str(res.user.id))
+            .limit(1)
+            .execute()
+        )
+
+        preferences = {
+            "nickname": nickname,
+            "locale": body.locale,
+            "notification_timezone": notification_timezone,
+        }
+
+        if existing_result.data:
+            profile_result = (
+                database.table("users")
+                .update(preferences)
+                .eq("id", existing_result.data[0]["id"])
+                .execute()
+            )
+        else:
+            profile_result = (
+                database.table("users")
+                .insert({
+                    "auth_uid": str(res.user.id),
+                    "email": res.user.email or email,
+                    **preferences,
+                })
+                .execute()
+            )
+
+        if not profile_result.data:
+            raise RuntimeError("Profile write returned no rows")
+
+        profile = profile_result.data[0]
+
+    except Exception as error:
+        # 인증 계정은 이미 생성됐을 수 있으므로 삭제하지 않는다.
+        print(
+            "[auth/register] Profile initialization failed:",
+            type(error).__name__,
+            flush=True,
+        )
+
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Account created, but profile setup could not be completed. "
+                "Please try logging in before registering again."
+            ),
+        ) from error
+
+    if not res.session:
+        return {
+            "confirmationRequired": True,
+        }
+
     return {
+        "confirmationRequired": False,
         "user": {
-            "id": res.user.id,
-            "email": res.user.email,
-            "nickname": res.user.user_metadata.get("nickname"),
+            "id": profile["id"],
+            "user_id": profile["id"],
+            "auth_uid": str(res.user.id),
+            "email": profile.get("email") or email,
+            "nickname": profile.get("nickname") or nickname,
+            "plan": profile.get("plan") or "free",
+            "profile_image_url": profile.get("profile_image_url"),
+            "locale": profile.get("locale") or body.locale,
+            "notificationTimezone": profile.get("notification_timezone"),
         },
         "token": res.session.access_token,
         "expiresIn": res.session.expires_in,
+        "refreshToken": res.session.refresh_token,
     }
 
 
