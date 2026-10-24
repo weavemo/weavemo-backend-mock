@@ -390,6 +390,18 @@ def get_friend_requests(
         before_id=before_id,
     )
 
+@router.get("/requests/count")
+def get_friend_request_count(
+    current_user=Depends(get_current_user),
+):
+    supabase = get_supabase()
+
+    result = supabase.rpc(
+        "weavemo_friend_request_count",
+        {"p_user_id": current_user["user_id"]},
+    ).execute()
+
+    return {"count": int(result.data)}
 
 @router.post("/requests/{target_user_id}")
 def send_friend_request(
