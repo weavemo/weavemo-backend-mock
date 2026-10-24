@@ -281,11 +281,47 @@ def search_users(
         [user["id"] for user in candidates],
     )
 
+    # 이미 친구이거나 대기 중인 요청이 있는 사용자를 제외한다.
+    candidate_ids = [
+        user["id"]
+        for user in candidates
+    ]
+
+    related_ids = set()
+
+    if candidate_ids:
+        outgoing_relations = (
+            supabase.table("friendships")
+            .select("user_high_id")
+            .eq("user_low_id", user_id)
+            .in_("user_high_id", candidate_ids)
+            .execute()
+        )
+
+        incoming_relations = (
+            supabase.table("friendships")
+            .select("user_low_id")
+            .eq("user_high_id", user_id)
+            .in_("user_low_id", candidate_ids)
+            .execute()
+        )
+
+        related_ids.update(
+            row["user_high_id"]
+            for row in outgoing_relations.data or []
+        )
+
+        related_ids.update(
+            row["user_low_id"]
+            for row in incoming_relations.data or []
+        )
+
     return {
         "items": [
             public_user(user)
             for user in candidates
             if user["id"] not in blocked_ids
+            and user["id"] not in related_ids
         ]
     }
 
