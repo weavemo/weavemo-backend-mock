@@ -275,56 +275,82 @@ def search_users(
 
     candidates = result.data or []
 
+    if not candidates:
+        return {"items": []}
+
     blocked_ids = get_blocked_ids(
         supabase,
         user_id,
         [user["id"] for user in candidates],
     )
 
-    # 이미 친구이거나 대기 중인 요청이 있는 사용자를 제외한다.
-    candidate_ids = [
-        user["id"]
+    visible_users = [
+        user
         for user in candidates
+        if user["id"] not in blocked_ids
     ]
 
-    related_ids = set()
+    if not visible_users:
+        return {"items": []}
 
-    if candidate_ids:
-        outgoing_relations = (
-            supabase.table("friendships")
-            .select("user_high_id")
-            .eq("user_low_id", user_id)
-            .in_("user_high_id", candidate_ids)
-            .execute()
+    visible_ids = [
+        user["id"]
+        for user in visible_users
+    ]
+
+    low_side = (
+        supabase.table("friendships")
+        .select(
+            "user_low_id, user_high_id, "
+            "requested_by, status"
         )
+        .eq("user_low_id", user_id)
+        .in_("user_high_id", visible_ids)
+        .execute()
+    )
 
-        incoming_relations = (
-            supabase.table("friendships")
-            .select("user_low_id")
-            .eq("user_high_id", user_id)
-            .in_("user_low_id", candidate_ids)
-            .execute()
+    high_side = (
+        supabase.table("friendships")
+        .select(
+            "user_low_id, user_high_id, "
+            "requested_by, status"
         )
+        .eq("user_high_id", user_id)
+        .in_("user_low_id", visible_ids)
+        .execute()
+    )
 
-        related_ids.update(
+    relationships = {}
+
+    for row in (
+        (low_side.data or [])
+        + (high_side.data or [])
+    ):
+        target_id = (
             row["user_high_id"]
-            for row in outgoing_relations.data or []
+            if row["user_low_id"] == user_id
+            else row["user_low_id"]
         )
 
-        related_ids.update(
-            row["user_low_id"]
-            for row in incoming_relations.data or []
-        )
+        if row["status"] == "accepted":
+            relationships[target_id] = "friends"
+        elif row["requested_by"] == user_id:
+            relationships[target_id] = "outgoing"
+        else:
+            relationships[target_id] = "incoming"
 
     return {
         "items": [
-            public_user(user)
-            for user in candidates
-            if user["id"] not in blocked_ids
-            and user["id"] not in related_ids
+            {
+                **public_user(user),
+                "relationship": relationships.get(
+                    user["id"],
+                    "none",
+                ),
+            }
+            for user in visible_users
         ]
     }
-
 
 @router.get("")
 def get_friends(
