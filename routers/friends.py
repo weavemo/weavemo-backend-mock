@@ -481,3 +481,174 @@ def remove_friend(
         target_user_id,
         "remove",
     )
+# 차단 관리
+
+
+def change_user_block(
+    user_id: int,
+    target_user_id: int,
+    action: str,
+) -> dict:
+    supabase = get_supabase()
+
+    result = supabase.rpc(
+        "weavemo_block_action",
+        {
+            "p_actor": user_id,
+            "p_target": target_user_id,
+            "p_action": action,
+        },
+    ).execute()
+
+    data = result.data
+
+    if not isinstance(data, dict):
+        raise HTTPException(
+            status_code=503,
+            detail="Could not update block",
+        )
+
+    error = data.get("error")
+
+    errors = {
+        "self_not_allowed": (
+            400,
+            "Cannot block yourself",
+        ),
+        "invalid_action": (
+            400,
+            "Invalid action",
+        ),
+        "not_found": (
+            404,
+            "User not found",
+        ),
+    }
+
+    if error:
+        status_code, detail = errors.get(
+            error,
+            (503, "Could not update block"),
+        )
+
+        raise HTTPException(
+            status_code=status_code,
+            detail=detail,
+        )
+
+    if not isinstance(data.get("blocked"), bool):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid block response",
+        )
+
+    return data
+
+
+@router.get("/blocks")
+def get_my_blocks(
+    limit: int = Query(20, ge=1, le=50),
+    before_id: int | None = Query(
+        None,
+        ge=1,
+        le=MAX_BIGINT,
+    ),
+    current_user=Depends(get_current_user),
+):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+
+    query = (
+        supabase.table("user_blocks")
+        .select("id, blocked_id, created_at")
+        .eq("blocker_id", user_id)
+    )
+
+    if before_id is not None:
+        query = query.lt("id", before_id)
+
+    result = (
+        query.order("id", desc=True)
+        .limit(limit + 1)
+        .execute()
+    )
+
+    all_rows = result.data or []
+    rows = all_rows[:limit]
+    has_more = len(all_rows) > limit
+
+    if not rows:
+        return {
+            "items": [],
+            "next_cursor": None,
+        }
+
+    users_result = (
+        supabase.table("users")
+        .select("id, nickname, profile_image_url")
+        .in_(
+            "id",
+            [row["blocked_id"] for row in rows],
+        )
+        .execute()
+    )
+
+    users_by_id = {
+        user["id"]: user
+        for user in users_result.data or []
+    }
+
+    items = []
+
+    for row in rows:
+        user = users_by_id.get(row["blocked_id"])
+
+        if user is None:
+            continue
+
+        items.append({
+            **public_user(user),
+            "block_id": str(row["id"]),
+            "created_at": row["created_at"],
+        })
+
+    return {
+        "items": items,
+        "next_cursor": (
+            str(rows[-1]["id"])
+            if has_more
+            else None
+        ),
+    }
+
+
+@router.post("/blocks/{target_user_id}")
+def block_user(
+    target_user_id: int = Path(
+        ...,
+        ge=1,
+        le=MAX_BIGINT,
+    ),
+    current_user=Depends(get_current_user),
+):
+    return change_user_block(
+        current_user["user_id"],
+        target_user_id,
+        "block",
+    )
+
+
+@router.delete("/blocks/{target_user_id}")
+def unblock_user(
+    target_user_id: int = Path(
+        ...,
+        ge=1,
+        le=MAX_BIGINT,
+    ),
+    current_user=Depends(get_current_user),
+):
+    return change_user_block(
+        current_user["user_id"],
+        target_user_id,
+        "unblock",
+    )
