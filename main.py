@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from routers import rewards
 from routers import notifications
 from routers import onboarding
+from routers import chat
 
 app = FastAPI()
 
@@ -73,4 +74,9 @@ app.include_router(
     onboarding.router,
     prefix="/user",
     tags=["Onboarding"],
+)
+app.include_router(
+    chat.router,
+    prefix="/chat",
+    tags=["Chat"],
 )
