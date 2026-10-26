@@ -116,6 +116,10 @@ def call_chat_rpc(function_name: str, params: dict) -> dict:
                 409,
                 "The invitation has no message yet",
             ),
+            "conversation_ended": (
+                409,
+                "This conversation has ended",
+            ),
         }
 
         status_code, detail = errors.get(
