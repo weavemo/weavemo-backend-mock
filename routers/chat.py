@@ -19,6 +19,8 @@ class SendMessageRequest(BaseModel):
     body: str = Field(min_length=1, max_length=2000)
     client_message_id: UUID
 
+class MarkChatReadRequest(BaseModel):
+    message_id: int = Field(ge=1, le=MAX_BIGINT)
 
 def call_chat_rpc(function_name: str, params: dict) -> dict:
     try:
@@ -242,4 +244,60 @@ def list_chat_messages(
     return {
         "items": items,
         "next_cursor": next_cursor,
+    }
+# weavemo-backend-mock/routers/chat.py
+# 기존 코드 맨 아래에 추가
+
+@router.get("/unread-count")
+def get_chat_unread_count(
+    current_user=Depends(get_current_user),
+):
+    data = call_chat_rpc(
+        "weavemo_chat_unread_count",
+        {"p_actor": current_user["user_id"]},
+    )
+
+    count = data.get("count")
+
+    if (
+        not isinstance(count, str)
+        or not count.isascii()
+        or not count.isdecimal()
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid unread count response",
+        )
+
+    # 브라우저에서 안전하게 표현 가능한 정수 범위로 제한한다.
+    return {"count": min(int(count), 9007199254740991)}
+
+
+@router.put("/conversations/{conversation_id}/read")
+def mark_chat_read(
+    body: MarkChatReadRequest,
+    conversation_id: int = Path(..., ge=1, le=MAX_BIGINT),
+    current_user=Depends(get_current_user),
+):
+    data = call_chat_rpc(
+        "weavemo_mark_chat_read",
+        {
+            "p_actor": current_user["user_id"],
+            "p_conversation_id": conversation_id,
+            "p_message_id": body.message_id,
+        },
+    )
+
+    if (
+        data.get("conversation_id") != str(conversation_id)
+        or not is_valid_id(data.get("last_read_message_id"))
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid read response",
+        )
+
+    return {
+        "conversation_id": data["conversation_id"],
+        "last_read_message_id": data["last_read_message_id"],
     }
