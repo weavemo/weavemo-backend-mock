@@ -2,8 +2,7 @@
 
 import logging
 from uuid import UUID
-
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field
 
@@ -173,4 +172,74 @@ def send_chat_message(
         "body": data["body"],
         "client_message_id": data["client_message_id"],
         "created_at": data["created_at"],
+    }
+
+# weavemo-backend-mock/routers/chat.py
+# 기존 코드 맨 아래에 추가
+
+@router.get("/conversations/{conversation_id}/messages")
+def list_chat_messages(
+    conversation_id: int = Path(..., ge=1, le=MAX_BIGINT),
+    before_id: int | None = Query(
+        default=None,
+        ge=1,
+        le=MAX_BIGINT,
+    ),
+    limit: int = Query(default=30, ge=1, le=50),
+    current_user=Depends(get_current_user),
+):
+    data = call_chat_rpc(
+        "weavemo_list_chat_messages",
+        {
+            "p_actor": current_user["user_id"],
+            "p_conversation_id": conversation_id,
+            "p_before_id": before_id,
+            "p_limit": limit,
+        },
+    )
+
+    items = data.get("items")
+    next_cursor = data.get("next_cursor")
+
+    if (
+        not isinstance(items, list)
+        or len(items) > limit
+        or (
+            next_cursor is not None
+            and not is_valid_id(next_cursor)
+        )
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid message list response",
+        )
+
+    for message in items:
+        if not isinstance(message, dict):
+            raise HTTPException(
+                status_code=503,
+                detail="Invalid message list response",
+            )
+
+        sender_id = message.get("sender_id")
+
+        if (
+            not is_valid_id(message.get("id"))
+            or message.get("conversation_id") != str(conversation_id)
+            or (
+                sender_id is not None
+                and not is_valid_id(sender_id)
+            )
+            or not isinstance(message.get("body"), str)
+            or not isinstance(message.get("client_message_id"), str)
+            or not isinstance(message.get("created_at"), str)
+        ):
+            raise HTTPException(
+                status_code=503,
+                detail="Invalid message list response",
+            )
+
+    return {
+        "items": items,
+        "next_cursor": next_cursor,
     }
