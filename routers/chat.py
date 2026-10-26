@@ -140,6 +140,9 @@ def is_valid_id(value: object) -> bool:
     )
 
 
+# weavemo-backend-mock/routers/chat.py
+# 기존 open_direct_chat 함수 교체
+
 @router.post("/direct/{target_user_id}")
 def open_direct_chat(
     target_user_id: int = Path(..., ge=1, le=MAX_BIGINT),
@@ -153,9 +156,26 @@ def open_direct_chat(
         },
     )
 
+    conversation_id = data.get("conversation_id")
+    invitation_status = data.get("invitation_status")
+    requested_by = data.get("requested_by")
+
     if (
-        not is_valid_id(data.get("conversation_id"))
+        not is_valid_id(conversation_id)
         or data.get("kind") != "direct"
+        or invitation_status not in (
+            "pending",
+            "accepted",
+            "declined",
+        )
+        or (
+            requested_by is not None
+            and not is_valid_id(requested_by)
+        )
+        or (
+            invitation_status in ("pending", "declined")
+            and requested_by is None
+        )
     ):
         raise HTTPException(
             status_code=503,
@@ -163,10 +183,11 @@ def open_direct_chat(
         )
 
     return {
-        "conversation_id": data["conversation_id"],
+        "conversation_id": conversation_id,
         "kind": "direct",
+        "invitation_status": invitation_status,
+        "requested_by": requested_by,
     }
-
 
 @router.post("/conversations/{conversation_id}/messages")
 def send_chat_message(
