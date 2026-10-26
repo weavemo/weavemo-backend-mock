@@ -500,3 +500,39 @@ def get_chat_state(
         "ended_at": data.get("ended_at"),
         "ended_by": data.get("ended_by"),
     }
+# weavemo-backend-mock/routers/chat.py
+# 기존 코드 맨 아래에 추가
+
+@router.post("/conversations/{conversation_id}/end")
+def end_chat(
+    conversation_id: int = Path(..., ge=1, le=MAX_BIGINT),
+    current_user=Depends(get_current_user),
+):
+    data = call_chat_rpc(
+        "weavemo_end_chat",
+        {
+            "p_actor": current_user["user_id"],
+            "p_conversation_id": conversation_id,
+        },
+    )
+
+    if (
+        data.get("conversation_id") != str(conversation_id)
+        or data.get("ended") is not True
+        or not isinstance(data.get("ended_at"), str)
+        or (
+            data.get("ended_by") is not None
+            and not is_valid_id(data["ended_by"])
+        )
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid conversation end response",
+        )
+
+    return {
+        "conversation_id": data["conversation_id"],
+        "ended": True,
+        "ended_at": data["ended_at"],
+        "ended_by": data.get("ended_by"),
+    }
