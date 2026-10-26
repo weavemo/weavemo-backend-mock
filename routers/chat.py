@@ -1,5 +1,6 @@
 # weavemo-backend-mock/routers/chat.py
 
+from typing import Literal
 import logging
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -21,6 +22,9 @@ class SendMessageRequest(BaseModel):
 
 class MarkChatReadRequest(BaseModel):
     message_id: int = Field(ge=1, le=MAX_BIGINT)
+
+class ChatInvitationActionRequest(BaseModel):
+    action: Literal["accept", "decline"]
 
 def call_chat_rpc(function_name: str, params: dict) -> dict:
     try:
@@ -83,6 +87,34 @@ def call_chat_rpc(function_name: str, params: dict) -> dict:
             "retry_required": (
                 503,
                 "Please retry sending the message",
+            ),
+            "invalid_action": (
+                400,
+                "Invalid invitation action",
+            ),
+            "invitation_pending": (
+                409,
+                "Waiting for the recipient to accept",
+            ),
+            "invitation_accept_required": (
+                403,
+                "Accept the invitation before replying",
+            ),
+            "invitation_declined": (
+                403,
+                "Conversation invitation was declined",
+            ),
+            "invitation_not_allowed": (
+                403,
+                "Only the recipient can respond to this invitation",
+            ),
+            "invitation_not_pending": (
+                409,
+                "This invitation has already been processed",
+            ),
+            "invitation_not_ready": (
+                409,
+                "The invitation has no message yet",
             ),
         }
 
@@ -300,4 +332,96 @@ def mark_chat_read(
     return {
         "conversation_id": data["conversation_id"],
         "last_read_message_id": data["last_read_message_id"],
+    }
+
+# weavemo-backend-mock/routers/chat.py
+# 기존 코드 맨 아래에 추가
+
+@router.get("/invitations")
+def list_chat_invitations(
+    before_id: int | None = Query(
+        default=None,
+        ge=1,
+        le=MAX_BIGINT,
+    ),
+    limit: int = Query(default=20, ge=1, le=50),
+    current_user=Depends(get_current_user),
+):
+    data = call_chat_rpc(
+        "weavemo_list_chat_invitations",
+        {
+            "p_actor": current_user["user_id"],
+            "p_before_id": before_id,
+            "p_limit": limit,
+        },
+    )
+
+    items = data.get("items")
+    next_cursor = data.get("next_cursor")
+
+    if (
+        not isinstance(items, list)
+        or len(items) > limit
+        or (
+            next_cursor is not None
+            and not is_valid_id(next_cursor)
+        )
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid invitation response",
+        )
+
+    for item in items:
+        if (
+            not isinstance(item, dict)
+            or not is_valid_id(item.get("conversation_id"))
+            or not is_valid_id(item.get("sender_id"))
+            or not is_valid_id(item.get("message_id"))
+            or not isinstance(item.get("nickname"), str)
+            or not isinstance(item.get("body"), str)
+            or not isinstance(item.get("created_at"), str)
+        ):
+            raise HTTPException(
+                status_code=503,
+                detail="Invalid invitation response",
+            )
+
+    return {
+        "items": items,
+        "next_cursor": next_cursor,
+    }
+
+
+@router.post("/conversations/{conversation_id}/invitation")
+def respond_to_chat_invitation(
+    body: ChatInvitationActionRequest,
+    conversation_id: int = Path(..., ge=1, le=MAX_BIGINT),
+    current_user=Depends(get_current_user),
+):
+    data = call_chat_rpc(
+        "weavemo_chat_invitation_action",
+        {
+            "p_actor": current_user["user_id"],
+            "p_conversation_id": conversation_id,
+            "p_action": body.action,
+        },
+    )
+
+    expected_status = (
+        "accepted" if body.action == "accept" else "declined"
+    )
+
+    if (
+        data.get("conversation_id") != str(conversation_id)
+        or data.get("invitation_status") != expected_status
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid invitation response",
+        )
+
+    return {
+        "conversation_id": data["conversation_id"],
+        "invitation_status": data["invitation_status"],
     }
