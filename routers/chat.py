@@ -446,3 +446,53 @@ def respond_to_chat_invitation(
         "conversation_id": data["conversation_id"],
         "invitation_status": data["invitation_status"],
     }
+# weavemo-backend-mock/routers/chat.py
+# 기존 코드 맨 아래에 추가
+
+@router.get("/conversations/{conversation_id}/state")
+def get_chat_state(
+    conversation_id: int = Path(..., ge=1, le=MAX_BIGINT),
+    current_user=Depends(get_current_user),
+):
+    data = call_chat_rpc(
+        "weavemo_get_chat_state",
+        {
+            "p_actor": current_user["user_id"],
+            "p_conversation_id": conversation_id,
+        },
+    )
+
+    if (
+        data.get("conversation_id") != str(conversation_id)
+        or data.get("kind") != "direct"
+        or data.get("invitation_status") not in (
+            "pending",
+            "accepted",
+            "declined",
+        )
+        or (
+            data.get("requested_by") is not None
+            and not is_valid_id(data["requested_by"])
+        )
+        or (
+            data.get("ended_at") is not None
+            and not isinstance(data["ended_at"], str)
+        )
+        or (
+            data.get("ended_by") is not None
+            and not is_valid_id(data["ended_by"])
+        )
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid conversation state",
+        )
+
+    return {
+        "conversation_id": data["conversation_id"],
+        "kind": data["kind"],
+        "invitation_status": data["invitation_status"],
+        "requested_by": data.get("requested_by"),
+        "ended_at": data.get("ended_at"),
+        "ended_by": data.get("ended_by"),
+    }
