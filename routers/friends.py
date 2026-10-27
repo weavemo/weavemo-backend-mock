@@ -652,3 +652,55 @@ def unblock_user(
         target_user_id,
         "unblock",
     )
+# weavemo-backend-mock/routers/friends.py
+# 기존 코드 맨 아래에 추가
+
+@router.get("/{target_user_id}/profile")
+def get_friend_profile(
+    target_user_id: int = Path(
+        ...,
+        ge=1,
+        le=MAX_BIGINT,
+    ),
+    current_user=Depends(get_current_user),
+):
+    supabase = get_supabase()
+    user_id = int(current_user["user_id"])
+
+    relationship = (
+        supabase.table("friendships")
+        .select("id")
+        .eq("user_low_id", min(user_id, target_user_id))
+        .eq("user_high_id", max(user_id, target_user_id))
+        .eq("status", "accepted")
+        .limit(1)
+        .execute()
+    )
+
+    blocked_ids = get_blocked_ids(
+        supabase,
+        user_id,
+        [target_user_id],
+    )
+
+    if not relationship.data or target_user_id in blocked_ids:
+        raise HTTPException(
+            status_code=404,
+            detail="Friend not available",
+        )
+
+    result = (
+        supabase.table("users")
+        .select("id, nickname, profile_image_url")
+        .eq("id", target_user_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not result.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Friend not available",
+        )
+
+    return public_user(result.data[0])
