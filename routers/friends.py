@@ -655,6 +655,9 @@ def unblock_user(
 # weavemo-backend-mock/routers/friends.py
 # 기존 코드 맨 아래에 추가
 
+# weavemo-backend-mock/routers/friends.py
+# 기존 get_friend_profile 함수 교체
+
 @router.get("/{target_user_id}/profile")
 def get_friend_profile(
     target_user_id: int = Path(
@@ -703,4 +706,21 @@ def get_friend_profile(
             detail="Friend not available",
         )
 
-    return public_user(result.data[0])
+    stats_result = (
+        supabase.table("user_stats")
+        .select("equipped_frame")
+        .eq("user_id", target_user_id)
+        .limit(1)
+        .execute()
+    )
+
+    stats = (
+        stats_result.data[0]
+        if stats_result.data
+        else {}
+    )
+
+    return {
+        **public_user(result.data[0]),
+        "equipped_frame": stats.get("equipped_frame"),
+    }
