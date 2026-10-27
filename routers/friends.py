@@ -12,7 +12,11 @@ from fastapi import (
     Path,
     Query,
 )
-
+from services.reward_ownership import (
+    owned_reward_keys,
+    valid_equipped_frame,
+    profile_equipment_by_user,
+)
 from db.database import get_supabase
 from dependencies.auth import get_current_user
 
@@ -207,7 +211,7 @@ def list_relationships(
     if visible_ids:
         users_result = (
             supabase.table("users")
-            .select("id, nickname, profile_image_url")
+            .select("id, nickname, profile_image_url, auth_uid")
             .in_("id", visible_ids)
             .execute()
         )
@@ -217,6 +221,10 @@ def list_relationships(
             for user in users_result.data or []
         }
 
+    equipment_by_id = profile_equipment_by_user(
+        supabase,
+        list(users_by_id.values()),
+    )
     items = []
 
     for row, target_id in zip(rows, target_ids):
@@ -227,6 +235,7 @@ def list_relationships(
 
         items.append({
             **public_user(user),
+            **equipment_by_id.get(target_id, {}),
             "friendship_id": str(row["id"]),
             "status": row["status"],
             "created_at": row["created_at"],
