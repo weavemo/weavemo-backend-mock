@@ -15,6 +15,7 @@ from routers import rewards
 from routers import notifications
 from routers import onboarding
 from routers import chat
+from routers import notes
 
 app = FastAPI()
 
@@ -85,4 +86,9 @@ app.include_router(
     presence.router,
     prefix="/presence",
     tags=["Presence"],
+)
+app.include_router(
+    notes.router,
+    prefix="/notes",
+    tags=["Notes"],
 )
