@@ -143,3 +143,47 @@ def send_push(
     except Exception:
         # 구독 주소나 비밀키를 오류 출력에 포함하지 않는다.
         return "failed", None
+# weavemo-backend-mock/services/push_sender.py
+# 기존 코드 맨 아래에 추가
+
+def get_chat_payload(
+    kind: str,
+    locale: str,
+    sender_name: str,
+    sender_id: int,
+    conversation_id: int,
+) -> dict:
+    if kind not in ("invitation", "message"):
+        raise ValueError("Invalid chat notification kind")
+
+    is_korean = locale.lower().startswith("ko")
+
+    nickname = (sender_name or "").strip()[:80]
+
+    if not nickname:
+        nickname = "친구" if is_korean else "Your friend"
+
+    if kind == "invitation":
+        body = (
+            f"{nickname}님이 대화를 요청했어요."
+            if is_korean
+            else f"{nickname} would like to chat."
+        )
+
+        # 홈에서 기존 요청 모달로 수락·거절한다.
+        target_path = "/home"
+    else:
+        body = (
+            f"{nickname}님에게 새 메시지가 왔어요."
+            if is_korean
+            else f"You have a new message from {nickname}."
+        )
+
+        target_path = f"/chat/with/{int(sender_id)}"
+
+    return {
+        "title": "WeaveMo",
+        "body": body,
+        "url": target_path,
+        "tag": f"weavemo-chat-{int(conversation_id)}",
+    }
