@@ -2,7 +2,7 @@
 
 import logging
 from uuid import UUID
-
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Path
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field
@@ -24,7 +24,12 @@ class SendNoteRequest(BaseModel):
         ge=1,
         le=MAX_BIGINT,
     )
+class NoteSettingsRequest(BaseModel):
+    receive_scope: Literal["friends", "requests"]
 
+
+class NoteRequestAction(BaseModel):
+    action: Literal["accept", "decline"]
 
 def is_valid_id(value: object) -> bool:
     return (
@@ -107,6 +112,14 @@ def call_notes_rpc(name: str, params: dict) -> dict:
                 403,
                 "This note request was declined",
             ),
+            "request_not_allowed": (
+                403,
+                "Only the recipient can respond to this note request",
+            ),
+            "request_not_pending": (
+                409,
+                "This note request has already been processed",
+            ),
         }
 
         status_code, detail = errors.get(
@@ -169,4 +182,118 @@ def send_note(
         "client_message_id": data["client_message_id"],
         "reply_to_id": data["reply_to_id"],
         "created_at": data["created_at"],
+    }
+# weavemo-backend-mock/routers/notes.py
+# 기존 코드 맨 아래에 추가
+
+@router.get("/settings")
+def get_note_settings(
+    current_user=Depends(get_current_user),
+):
+    try:
+        result = (
+            get_supabase()
+            .table("users")
+            .select("note_receive_scope")
+            .eq("id", current_user["user_id"])
+            .limit(1)
+            .execute()
+        )
+    except APIError as error:
+        logger.exception("Note settings lookup failed")
+
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load note settings",
+        ) from error
+
+    if not result.data:
+        raise HTTPException(
+            status_code=404,
+            detail="User not available",
+        )
+
+    scope = result.data[0].get("note_receive_scope")
+
+    if scope not in ("friends", "requests"):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid note settings",
+        )
+
+    return {"receive_scope": scope}
+
+
+@router.put("/settings")
+def update_note_settings(
+    body: NoteSettingsRequest,
+    current_user=Depends(get_current_user),
+):
+    try:
+        result = (
+            get_supabase()
+            .table("users")
+            .update({
+                "note_receive_scope": body.receive_scope,
+            })
+            .eq("id", current_user["user_id"])
+            .execute()
+        )
+    except APIError as error:
+        logger.exception("Note settings update failed")
+
+        raise HTTPException(
+            status_code=503,
+            detail="Could not save note settings",
+        ) from error
+
+    if not result.data:
+        raise HTTPException(
+            status_code=404,
+            detail="User not available",
+        )
+
+    if (
+        result.data[0].get("note_receive_scope")
+        != body.receive_scope
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid note settings response",
+        )
+
+    return {"receive_scope": body.receive_scope}
+
+
+@router.post("/requests/{request_id}/respond")
+def respond_to_note_request(
+    body: NoteRequestAction,
+    request_id: int = Path(..., ge=1, le=MAX_BIGINT),
+    current_user=Depends(get_current_user),
+):
+    data = call_notes_rpc(
+        "weavemo_note_request_action",
+        {
+            "p_actor": current_user["user_id"],
+            "p_request_id": request_id,
+            "p_action": body.action,
+        },
+    )
+
+    expected_status = (
+        "accepted" if body.action == "accept" else "declined"
+    )
+
+    if (
+        data.get("request_id") != str(request_id)
+        or data.get("status") != expected_status
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid note request response",
+        )
+
+    return {
+        "request_id": data["request_id"],
+        "status": data["status"],
     }
