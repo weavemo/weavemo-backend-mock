@@ -708,7 +708,7 @@ def get_friend_profile(
 
     stats_result = (
         supabase.table("user_stats")
-        .select("equipped_frame")
+        .select("equipped_frame, equipped_badge")
         .eq("user_id", target_user_id)
         .limit(1)
         .execute()
@@ -723,4 +723,5 @@ def get_friend_profile(
     return {
         **public_user(result.data[0]),
         "equipped_frame": stats.get("equipped_frame"),
+        "equipped_badge": stats.get("equipped_badge"),
     }
