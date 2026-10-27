@@ -1,9 +1,10 @@
 # weavemo-backend-mock/routers/notes.py
 
 import logging
+
 from uuid import UUID
 from typing import Literal
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field
 
@@ -296,4 +297,104 @@ def respond_to_note_request(
     return {
         "request_id": data["request_id"],
         "status": data["status"],
+    }
+# weavemo-backend-mock/routers/notes.py
+# 기존 코드 맨 아래에 추가
+
+@router.get("")
+def list_notes(
+    box: Literal["inbox", "sent", "requests"] = "inbox",
+    before_id: int | None = Query(
+        default=None,
+        ge=1,
+        le=MAX_BIGINT,
+    ),
+    limit: int = Query(default=20, ge=1, le=50),
+    current_user=Depends(get_current_user),
+):
+    user_id = str(current_user["user_id"])
+
+    data = call_notes_rpc(
+        "weavemo_list_friend_notes",
+        {
+            "p_actor": current_user["user_id"],
+            "p_box": box,
+            "p_before_id": before_id,
+            "p_limit": limit,
+        },
+    )
+
+    items = data.get("items")
+    next_cursor = data.get("next_cursor")
+
+    if (
+        not isinstance(items, list)
+        or len(items) > limit
+        or (
+            next_cursor is not None
+            and not is_valid_id(next_cursor)
+        )
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid note list response",
+        )
+
+    for item in items:
+        if not isinstance(item, dict):
+            raise HTTPException(
+                status_code=503,
+                detail="Invalid note list response",
+            )
+
+        valid = (
+            is_valid_id(item.get("id"))
+            and is_valid_id(item.get("sender_id"))
+            and is_valid_id(item.get("recipient_id"))
+            and is_valid_id(item.get("peer_id"))
+            and isinstance(item.get("nickname"), str)
+            and isinstance(item.get("body"), str)
+            and isinstance(item.get("created_at"), str)
+            and (
+                item.get("read_at") is None
+                or isinstance(item["read_at"], str)
+            )
+            and (
+                item.get("reply_to_id") is None
+                or is_valid_id(item["reply_to_id"])
+            )
+            and (
+                item.get("request_id") is None
+                or is_valid_id(item["request_id"])
+            )
+            and item.get("request_status") in (
+                None,
+                "pending",
+                "accepted",
+                "declined",
+            )
+        )
+
+        if box == "sent":
+            valid = (
+                valid
+                and item.get("sender_id") == user_id
+                and item.get("peer_id") == item.get("recipient_id")
+            )
+        else:
+            valid = (
+                valid
+                and item.get("recipient_id") == user_id
+                and item.get("peer_id") == item.get("sender_id")
+            )
+
+        if not valid:
+            raise HTTPException(
+                status_code=503,
+                detail="Invalid note list response",
+            )
+
+    return {
+        "items": items,
+        "next_cursor": next_cursor,
     }
