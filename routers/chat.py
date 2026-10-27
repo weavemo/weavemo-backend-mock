@@ -26,6 +26,9 @@ class MarkChatReadRequest(BaseModel):
 class ChatInvitationActionRequest(BaseModel):
     action: Literal["accept", "decline"]
 
+class ChatHeartbeatRequest(BaseModel):
+    connection_id: UUID
+
 def call_chat_rpc(function_name: str, params: dict) -> dict:
     try:
         result = get_supabase().rpc(
@@ -535,4 +538,38 @@ def end_chat(
         "ended": True,
         "ended_at": data["ended_at"],
         "ended_by": data.get("ended_by"),
+    }
+
+# weavemo-backend-mock/routers/chat.py
+# 기존 코드 맨 아래에 추가
+
+@router.post("/conversations/{conversation_id}/heartbeat")
+def chat_heartbeat(
+    body: ChatHeartbeatRequest,
+    conversation_id: int = Path(..., ge=1, le=MAX_BIGINT),
+    current_user=Depends(get_current_user),
+):
+    data = call_chat_rpc(
+        "weavemo_chat_heartbeat",
+        {
+            "p_actor": current_user["user_id"],
+            "p_conversation_id": conversation_id,
+            "p_connection_id": str(body.connection_id),
+        },
+    )
+
+    if (
+        data.get("conversation_id") != str(conversation_id)
+        or data.get("connected") is not True
+        or not isinstance(data.get("last_seen_at"), str)
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid heartbeat response",
+        )
+
+    return {
+        "conversation_id": data["conversation_id"],
+        "connected": True,
+        "last_seen_at": data["last_seen_at"],
     }
