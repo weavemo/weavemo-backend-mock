@@ -573,3 +573,87 @@ def chat_heartbeat(
         "connected": True,
         "last_seen_at": data["last_seen_at"],
     }
+# weavemo-backend-mock/routers/chat.py
+# 기존 코드 맨 아래에 추가
+
+@router.post("/end-active")
+def end_my_active_chats(
+    current_user=Depends(get_current_user),
+):
+    user_id = int(current_user["user_id"])
+    supabase = get_supabase()
+    ended_count = 0
+    last_id = 0
+
+    pair_filter = (
+        f"direct_user_low_id.eq.{user_id},"
+        f"direct_user_high_id.eq.{user_id}"
+    )
+
+    try:
+        latest = (
+            supabase.table("chat_conversations")
+            .select("id")
+            .eq("kind", "direct")
+            .is_("ended_at", "null")
+            .or_(pair_filter)
+            .order("id", desc=True)
+            .limit(1)
+            .execute()
+        )
+
+        if not latest.data:
+            return {"ended_count": 0}
+
+        max_id = latest.data[0]["id"]
+
+        while last_id < max_id:
+            result = (
+                supabase.table("chat_conversations")
+                .select("id")
+                .eq("kind", "direct")
+                .is_("ended_at", "null")
+                .or_(pair_filter)
+                .gt("id", last_id)
+                .lte("id", max_id)
+                .order("id")
+                .limit(100)
+                .execute()
+            )
+
+            rooms = result.data or []
+
+            if not rooms:
+                break
+
+            for room in rooms:
+                last_id = room["id"]
+
+                data = call_chat_rpc(
+                    "weavemo_end_chat",
+                    {
+                        "p_actor": user_id,
+                        "p_conversation_id": last_id,
+                    },
+                )
+
+                if (
+                    data.get("ended") is not True
+                    or data.get("conversation_id") != str(last_id)
+                ):
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Could not end active conversations",
+                    )
+
+                ended_count += 1
+
+    except APIError as error:
+        logger.exception("Ending active conversations failed")
+
+        raise HTTPException(
+            status_code=503,
+            detail="Could not end active conversations",
+        ) from error
+
+    return {"ended_count": ended_count}
