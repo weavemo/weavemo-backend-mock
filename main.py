@@ -1,6 +1,7 @@
 # main.py
 
 from routers import friends
+from routers import presence
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import auth, user, mood, stats, action, journal, badge, journal_entries, weekly_summaries, zen_art, capsule, collection
@@ -79,4 +80,9 @@ app.include_router(
     chat.router,
     prefix="/chat",
     tags=["Chat"],
+)
+app.include_router(
+    presence.router,
+    prefix="/presence",
+    tags=["Presence"],
 )
