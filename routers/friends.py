@@ -1,7 +1,10 @@
 # weavemo-backend-mock/routers/friends.py
 
 from typing import Literal
-
+from services.reward_ownership import (
+    owned_reward_keys,
+    valid_equipped_frame,
+)
 from fastapi import (
     APIRouter,
     Depends,
@@ -658,6 +661,9 @@ def unblock_user(
 # weavemo-backend-mock/routers/friends.py
 # 기존 get_friend_profile 함수 교체
 
+# weavemo-backend-mock/routers/friends.py
+# 기존 get_friend_profile 함수 교체
+
 @router.get("/{target_user_id}/profile")
 def get_friend_profile(
     target_user_id: int = Path(
@@ -694,7 +700,7 @@ def get_friend_profile(
 
     result = (
         supabase.table("users")
-        .select("id, nickname, profile_image_url")
+        .select("id, nickname, profile_image_url, auth_uid")
         .eq("id", target_user_id)
         .limit(1)
         .execute()
@@ -705,6 +711,8 @@ def get_friend_profile(
             status_code=404,
             detail="Friend not available",
         )
+
+    target_user = result.data[0]
 
     stats_result = (
         supabase.table("user_stats")
@@ -720,8 +728,20 @@ def get_friend_profile(
         else {}
     )
 
+    auth_uid = target_user.get("auth_uid")
+
+    owned = (
+        owned_reward_keys(supabase, auth_uid)
+        if auth_uid
+        else set()
+    )
+
     return {
-        **public_user(result.data[0]),
-        "equipped_frame": stats.get("equipped_frame"),
+        # auth_uid는 응답에 포함하지 않는다.
+        **public_user(target_user),
+        "equipped_frame": valid_equipped_frame(
+            stats.get("equipped_frame"),
+            owned,
+        ),
         "equipped_badge": stats.get("equipped_badge"),
     }
