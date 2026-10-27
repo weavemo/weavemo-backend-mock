@@ -91,6 +91,22 @@ def call_notes_rpc(name: str, params: dict) -> dict:
                 503,
                 "Please retry sending the note",
             ),
+            "requests_not_allowed": (
+                403,
+                "This user does not accept new note requests",
+            ),
+            "request_pending": (
+                409,
+                "Waiting for the recipient to accept your note request",
+            ),
+            "request_accept_required": (
+                403,
+                "Accept the note request before replying",
+            ),
+            "request_declined": (
+                403,
+                "This note request was declined",
+            ),
         }
 
         status_code, detail = errors.get(
