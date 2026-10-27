@@ -398,3 +398,113 @@ def list_notes(
         "items": items,
         "next_cursor": next_cursor,
     }
+# weavemo-backend-mock/routers/notes.py
+# 기존 코드 맨 아래에 추가
+
+@router.get("/counts")
+def get_note_counts(
+    current_user=Depends(get_current_user),
+):
+    data = call_notes_rpc(
+        "weavemo_note_counts",
+        {"p_actor": current_user["user_id"]},
+    )
+
+    counts = {}
+
+    for key in ("unread_count", "request_count"):
+        value = data.get(key)
+
+        if (
+            not isinstance(value, str)
+            or not value.isascii()
+            or not value.isdecimal()
+            or len(value) > 19
+        ):
+            raise HTTPException(
+                status_code=503,
+                detail="Invalid note count response",
+            )
+
+        counts[key] = min(int(value), 9007199254740991)
+
+    return counts
+
+
+@router.post("/{note_id}/open")
+def open_note(
+    note_id: int = Path(..., ge=1, le=MAX_BIGINT),
+    current_user=Depends(get_current_user),
+):
+    user_id = str(current_user["user_id"])
+
+    data = call_notes_rpc(
+        "weavemo_open_friend_note",
+        {
+            "p_actor": current_user["user_id"],
+            "p_note_id": note_id,
+        },
+    )
+
+    if (
+        data.get("id") != str(note_id)
+        or not is_valid_id(data.get("sender_id"))
+        or not is_valid_id(data.get("recipient_id"))
+        or not is_valid_id(data.get("peer_id"))
+        or not isinstance(data.get("nickname"), str)
+        or not isinstance(data.get("body"), str)
+        or not isinstance(data.get("created_at"), str)
+        or (
+            data.get("read_at") is not None
+            and not isinstance(data["read_at"], str)
+        )
+        or (
+            data.get("reply_to_id") is not None
+            and not is_valid_id(data["reply_to_id"])
+        )
+        or (
+            data.get("request_id") is not None
+            and not is_valid_id(data["request_id"])
+        )
+        or data.get("request_status") not in (
+            None,
+            "pending",
+            "accepted",
+            "declined",
+        )
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid note response",
+        )
+
+    if data["sender_id"] == user_id:
+        expected_peer = data["recipient_id"]
+    elif data["recipient_id"] == user_id:
+        expected_peer = data["sender_id"]
+    else:
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid note participant response",
+        )
+
+    if data["peer_id"] != expected_peer:
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid note participant response",
+        )
+
+    return {
+        "id": data["id"],
+        "sender_id": data["sender_id"],
+        "recipient_id": data["recipient_id"],
+        "peer_id": data["peer_id"],
+        "nickname": data["nickname"],
+        "profile_image_url": data.get("profile_image_url"),
+        "body": data["body"],
+        "reply_to_id": data.get("reply_to_id"),
+        "request_id": data.get("request_id"),
+        "request_status": data.get("request_status"),
+        "created_at": data["created_at"],
+        "read_at": data.get("read_at"),
+    }
