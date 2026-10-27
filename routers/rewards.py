@@ -1,7 +1,10 @@
 # routers/rewards.py
 
 from typing import Literal
-
+from services.reward_ownership import (
+    owned_reward_keys,
+    valid_equipped_frame,
+)
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -30,36 +33,7 @@ class EquipRequest(BaseModel):
     key: str | None = None
 
 
-def owned_reward_keys(
-    supabase,
-    auth_uid: str,
-) -> set[str]:
-    inventory = (
-        supabase.table("user_reward_inventory")
-        .select("reward_item_id")
-        .eq("user_id", auth_uid)
-        .execute()
-    )
 
-    item_ids = list({
-        row["reward_item_id"]
-        for row in inventory.data or []
-    })
-
-    if not item_ids:
-        return set()
-
-    items = (
-        supabase.table("reward_items")
-        .select("key")
-        .in_("id", item_ids)
-        .execute()
-    )
-
-    return {
-        item["key"]
-        for item in items.data or []
-    }
 
 
 @router.get("/state")
@@ -98,11 +72,7 @@ def get_reward_state(
     return {
         "owned": sorted(owned),
         "equipped": {
-            "frame": (
-                frame
-                if frame and f"frame_{frame}" in owned
-                else None
-            ),
+            "frame": valid_equipped_frame(frame, owned),
             "skin": (
                 skin
                 if skin in owned
