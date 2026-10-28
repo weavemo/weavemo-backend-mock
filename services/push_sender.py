@@ -187,3 +187,40 @@ def get_chat_payload(
         "url": target_path,
         "tag": f"weavemo-chat-{int(conversation_id)}",
     }
+# weavemo-backend-mock/services/push_sender.py
+# 기존 코드 맨 아래에 추가
+
+def get_note_payload(
+    kind: str,
+    locale: str,
+    sender_name: str,
+    note_id: int,
+) -> dict:
+    if kind not in ("note", "request"):
+        raise ValueError("Invalid note notification kind")
+
+    is_korean = (locale or "").lower().startswith("ko")
+    nickname = (sender_name or "").strip()[:80]
+
+    if not nickname:
+        nickname = "누군가" if is_korean else "Someone"
+
+    if kind == "request":
+        body = (
+            f"{nickname}님이 쪽지 요청을 보냈어요."
+            if is_korean
+            else f"{nickname} sent you a note request."
+        )
+    else:
+        body = (
+            f"{nickname}님이 쪽지를 보냈어요."
+            if is_korean
+            else f"{nickname} sent you a note."
+        )
+
+    return {
+        "title": "WeaveMo",
+        "body": body,
+        "url": "/notes",
+        "tag": f"weavemo-note-{int(note_id)}",
+    }
