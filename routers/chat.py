@@ -55,6 +55,10 @@ def call_chat_rpc(function_name: str, params: dict) -> dict:
 
     if error_code:
         errors = {
+           "messaging_restricted": (
+                403,
+                "messaging_restricted",
+            ),
             "self_not_allowed": (
                 400,
                 "Cannot start a conversation with yourself",
