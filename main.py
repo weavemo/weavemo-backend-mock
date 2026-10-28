@@ -2,6 +2,7 @@
 
 from routers import friends
 from routers import presence
+from routers import admin_notes
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import auth, user, mood, stats, action, journal, badge, journal_entries, weekly_summaries, zen_art, capsule, collection
@@ -91,4 +92,9 @@ app.include_router(
     notes.router,
     prefix="/notes",
     tags=["Notes"],
+)
+app.include_router(
+    admin_notes.router,
+    prefix="/admin",
+    tags=["Admin"],
 )
