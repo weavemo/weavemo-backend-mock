@@ -508,3 +508,52 @@ def open_note(
         "created_at": data["created_at"],
         "read_at": data.get("read_at"),
     }
+# weavemo-backend-mock/routers/notes.py
+# 기존 코드 맨 아래에 추가
+
+@router.delete("/{note_id}")
+def delete_note(
+    note_id: int = Path(..., ge=1, le=MAX_BIGINT),
+    current_user=Depends(get_current_user),
+):
+    result = get_supabase().rpc(
+        "weavemo_delete_friend_note",
+        {
+            "p_actor": int(current_user["user_id"]),
+            "p_note_id": note_id,
+        },
+    ).execute()
+
+    data = result.data
+
+    if not isinstance(data, dict):
+        raise HTTPException(
+            status_code=503,
+            detail="Could not delete note",
+        )
+
+    if data.get("error") == "not_available":
+        raise HTTPException(
+            status_code=404,
+            detail="Note not available",
+        )
+
+    if data.get("error"):
+        raise HTTPException(
+            status_code=400,
+            detail="Could not delete note",
+        )
+
+    if (
+        data.get("deleted") is not True
+        or data.get("id") != str(note_id)
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid delete response",
+        )
+
+    return {
+        "id": str(note_id),
+        "deleted": True,
+    }
