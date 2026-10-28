@@ -443,3 +443,72 @@ def revoke_moderation_action(
         "revoked": True,
         "revoked_at": data["revoked_at"],
     }
+# weavemo-backend-mock/routers/admin_notes.py
+# 기존 코드 맨 아래에 추가
+
+@router.get("/note-reports/{report_id}/moderation-actions")
+def get_report_moderation_actions(
+    report_id: int = Path(..., ge=1, le=MAX_BIGINT),
+    admin=Depends(require_admin),
+):
+    supabase = get_supabase()
+
+    try:
+        report = (
+            supabase.table("note_reports")
+            .select("id")
+            .eq("id", report_id)
+            .limit(1)
+            .execute()
+        )
+
+        if not report.data:
+            raise HTTPException(
+                status_code=404,
+                detail="Report not found",
+            )
+
+        result = (
+            supabase.table("moderation_actions")
+            .select(
+                "id, report_id, target_user_id, admin_user_id, "
+                "action, reason, internal_note, created_at, "
+                "expires_at, revoked_at, revoked_by, revoke_reason"
+            )
+            .eq("report_id", report_id)
+            .order("id", desc=True)
+            .execute()
+        )
+    except HTTPException:
+        raise
+    except Exception as error:
+        logger.exception("Moderation history lookup failed")
+
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load moderation history",
+        ) from error
+
+    items = []
+
+    for row in result.data or []:
+        items.append({
+            "id": str(row["id"]),
+            "report_id": str(row["report_id"]),
+            "target_user_id": str(row["target_user_id"]),
+            "admin_user_id": str(row["admin_user_id"]),
+            "action": row["action"],
+            "reason": row["reason"],
+            "internal_note": row["internal_note"],
+            "created_at": row["created_at"],
+            "expires_at": row.get("expires_at"),
+            "revoked_at": row.get("revoked_at"),
+            "revoked_by": (
+                str(row["revoked_by"])
+                if row.get("revoked_by") is not None
+                else None
+            ),
+            "revoke_reason": row.get("revoke_reason"),
+        })
+
+    return {"items": items}
