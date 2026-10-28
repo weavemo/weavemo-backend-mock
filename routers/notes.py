@@ -65,6 +65,10 @@ def call_notes_rpc(name: str, params: dict) -> dict:
 
     if error_code:
         errors = {
+           "messaging_restricted": (
+                403,
+                "messaging_restricted",
+            ),
             "invalid_request": (
                 400,
                 "Invalid note request",
