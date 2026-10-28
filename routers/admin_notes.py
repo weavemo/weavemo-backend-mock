@@ -361,3 +361,85 @@ def apply_note_moderation(
         "expires_at": data.get("expires_at"),
         "applied": True,
     }
+# weavemo-backend-mock/routers/admin_notes.py
+# 기존 코드 맨 아래에 추가
+
+class RevokeModerationRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=1000)
+
+
+@router.post("/moderation-actions/{action_id}/revoke")
+def revoke_moderation_action(
+    body: RevokeModerationRequest,
+    action_id: int = Path(..., ge=1, le=MAX_BIGINT),
+    admin=Depends(require_admin),
+):
+    reason = body.reason.strip()
+
+    if not reason:
+        raise HTTPException(
+            status_code=400,
+            detail="A revocation reason is required",
+        )
+
+    try:
+        result = get_supabase().rpc(
+            "weavemo_revoke_moderation_action",
+            {
+                "p_admin": int(admin["user_id"]),
+                "p_action_id": action_id,
+                "p_reason": reason,
+            },
+        ).execute()
+    except Exception as error:
+        logger.exception("Revoking moderation action failed")
+
+        raise HTTPException(
+            status_code=503,
+            detail="Could not confirm revocation result",
+        ) from error
+
+    data = result.data
+
+    if not isinstance(data, dict):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid revocation response",
+        )
+
+    errors = {
+        "invalid_request": (400, "Invalid revocation request"),
+        "not_found": (404, "Moderation action not found"),
+        "admin_required": (403, "Admin access required"),
+        "action_changed": (409, "Moderation action changed"),
+        "not_a_restriction": (400, "This action is not a restriction"),
+    }
+
+    error_code = data.get("error")
+
+    if error_code:
+        status_code, detail = errors.get(
+            error_code,
+            (503, "Could not confirm revocation result"),
+        )
+
+        raise HTTPException(
+            status_code=status_code,
+            detail=detail,
+        )
+
+    if (
+        data.get("id") != str(action_id)
+        or data.get("revoked") is not True
+        or not isinstance(data.get("revoked_at"), str)
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid revocation response",
+        )
+
+    return {
+        "id": str(action_id),
+        "revoked": True,
+        "revoked_at": data["revoked_at"],
+    }
