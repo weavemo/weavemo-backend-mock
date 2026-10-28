@@ -224,3 +224,47 @@ def get_note_payload(
         "url": "/notes",
         "tag": f"weavemo-note-{int(note_id)}",
     }
+# weavemo-backend-mock/services/push_sender.py
+# 기존 코드 맨 아래에 추가
+
+def get_moderation_payload(
+    kind: str,
+    locale: str,
+    event_id: int,
+) -> dict:
+    is_korean = (locale or "").lower().startswith("ko")
+
+    messages = {
+        "admin_report": (
+            "새 신고가 접수됐어요. 신고 관리에서 확인해 주세요.",
+            "A new report was submitted. Open report management to review it.",
+        ),
+        "moderation_warning": (
+            "운영자 경고가 도착했어요. 앱에서 내용을 확인해 주세요.",
+            "You received a moderator warning. Open the app to review it.",
+        ),
+        "moderation_restriction": (
+            "쪽지·채팅 전송이 일시 제한됐어요. 앱에서 사유와 종료 시각을 확인해 주세요.",
+            "Messaging is temporarily restricted. Open the app for the reason and end time.",
+        ),
+        "moderation_revoked": (
+            "전송 제한 한 건이 해제됐어요. 앱에서 현재 상태를 확인해 주세요.",
+            "A messaging restriction was lifted. Open the app to check your current status.",
+        ),
+    }
+
+    if kind not in messages or event_id < 1:
+        raise ValueError("Invalid moderation notification")
+
+    korean, english = messages[kind]
+
+    return {
+        "title": "WeaveMo",
+        "body": korean if is_korean else english,
+        "url": (
+            "/admin/note-reports"
+            if kind == "admin_report"
+            else "/notes"
+        ),
+        "tag": f"weavemo-{kind}-{event_id}",
+    }
