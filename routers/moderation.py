@@ -31,7 +31,7 @@ def get_my_moderation_status(
         result = get_supabase().rpc(
             "weavemo_my_moderation_status",
             {
-                # 他人のIDは受け取らず、認証済み本人だけを 조회한다.
+                # 다른 사람의 ID는 받지 않고, 인증된 본인만 조회한다.
                 "p_actor": int(current_user["user_id"]),
             },
         ).execute()
