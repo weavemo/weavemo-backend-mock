@@ -252,6 +252,212 @@ def list_relationships(
         ),
     }
 
+# weavemo-backend-mock/routers/friends.py
+# @router.get("/search") 바로 위에 추가
+
+@router.get("/discover")
+def discover_users(
+    q: str | None = Query(None, max_length=30),
+    limit: int = Query(20, ge=1, le=50),
+    before_id: int | None = Query(
+        None,
+        ge=1,
+        le=MAX_BIGINT,
+    ),
+    current_user=Depends(get_current_user),
+):
+    supabase = get_supabase()
+    user_id = int(current_user["user_id"])
+    keyword = (q or "").strip()
+
+    query = (
+        supabase.table("users")
+        .select(
+            "id, nickname, profile_image_url, "
+            "auth_uid, note_receive_scope"
+        )
+        .neq("id", user_id)
+    )
+
+    if keyword:
+        escaped_keyword = (
+            keyword.replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+
+        query = query.ilike(
+            "nickname",
+            f"%{escaped_keyword}%",
+        )
+
+    if before_id is not None:
+        query = query.lt("id", before_id)
+
+    result = (
+        query.order("id", desc=True)
+        .limit(limit + 1)
+        .execute()
+    )
+
+    all_rows = result.data or []
+    rows = all_rows[:limit]
+    has_more = len(all_rows) > limit
+
+    if not rows:
+        return {
+            "items": [],
+            "next_cursor": None,
+        }
+
+    blocked_ids = get_blocked_ids(
+        supabase,
+        user_id,
+        [user["id"] for user in rows],
+    )
+
+    visible_users = [
+        user
+        for user in rows
+        if user["id"] not in blocked_ids
+    ]
+
+    relationships = {}
+    note_requests = {}
+
+    if visible_users:
+        visible_ids = [
+            user["id"]
+            for user in visible_users
+        ]
+
+        low_side = (
+            supabase.table("friendships")
+            .select(
+                "user_low_id, user_high_id, "
+                "requested_by, status"
+            )
+            .eq("user_low_id", user_id)
+            .in_("user_high_id", visible_ids)
+            .execute()
+        )
+
+        high_side = (
+            supabase.table("friendships")
+            .select(
+                "user_low_id, user_high_id, "
+                "requested_by, status"
+            )
+            .eq("user_high_id", user_id)
+            .in_("user_low_id", visible_ids)
+            .execute()
+        )
+
+        for row in (
+            (low_side.data or [])
+            + (high_side.data or [])
+        ):
+            target_id = (
+                row["user_high_id"]
+                if row["user_low_id"] == user_id
+                else row["user_low_id"]
+            )
+
+            if row["status"] == "accepted":
+                relationships[target_id] = "friends"
+            elif row["status"] == "pending":
+                relationships[target_id] = (
+                    "outgoing"
+                    if row["requested_by"] == user_id
+                    else "incoming"
+                )
+
+        requests_low = (
+            supabase.table("friend_note_requests")
+            .select(
+                "user_low_id, user_high_id, "
+                "requested_by, status"
+            )
+            .eq("user_low_id", user_id)
+            .in_("user_high_id", visible_ids)
+            .execute()
+        )
+
+        requests_high = (
+            supabase.table("friend_note_requests")
+            .select(
+                "user_low_id, user_high_id, "
+                "requested_by, status"
+            )
+            .eq("user_high_id", user_id)
+            .in_("user_low_id", visible_ids)
+            .execute()
+        )
+
+        for row in (
+            (requests_low.data or [])
+            + (requests_high.data or [])
+        ):
+            target_id = (
+                row["user_high_id"]
+                if row["user_low_id"] == user_id
+                else row["user_low_id"]
+            )
+
+            status = row["status"]
+
+            if status == "pending":
+                status = (
+                    "outgoing"
+                    if row["requested_by"] == user_id
+                    else "incoming"
+                )
+
+            note_requests[target_id] = status
+
+    equipment_by_id = profile_equipment_by_user(
+        supabase,
+        visible_users,
+    )
+
+    items = []
+
+    for user in visible_users:
+        target_id = user["id"]
+        relationship = relationships.get(
+            target_id,
+            "none",
+        )
+        note_status = note_requests.get(target_id)
+
+        # 기존에 수락한 쪽지 연결은 수신 범위를 바꿔도 유지한다.
+        can_send_note = (
+            relationship == "friends"
+            or note_status == "accepted"
+            or (
+                note_status is None
+                and user.get("note_receive_scope") == "requests"
+            )
+        )
+
+        items.append({
+            **public_user(user),
+            **equipment_by_id.get(target_id, {}),
+            "relationship": relationship,
+            "note_request_status": note_status,
+            "can_send_note": can_send_note,
+        })
+
+    return {
+        "items": items,
+        # 차단으로 목록이 줄어도 조회 위치를 유지한다.
+        "next_cursor": (
+            str(rows[-1]["id"])
+            if has_more
+            else None
+        ),
+    }
+
 
 @router.get("/search")
 def search_users(
