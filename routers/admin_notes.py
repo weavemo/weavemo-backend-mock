@@ -512,3 +512,31 @@ def get_report_moderation_actions(
         })
 
     return {"items": items}
+# weavemo-backend-mock/routers/admin_notes.py
+# 기존 코드 맨 아래에 추가
+
+@router.get("/note-report-counts")
+def get_note_report_counts(
+    admin=Depends(require_admin),
+):
+    try:
+        result = (
+            get_supabase()
+            .table("note_reports")
+            .select("id", count="exact", head=True)
+            .eq("status", "pending")
+            .execute()
+        )
+
+        if result.count is None:
+            raise RuntimeError("Report count was not returned")
+
+    except Exception as error:
+        logger.exception("Pending report count lookup failed")
+
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load pending report count",
+        ) from error
+
+    return {"pending_count": result.count}
