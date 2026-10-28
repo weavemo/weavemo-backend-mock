@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from db.database import get_supabase
 from dependencies.admin import require_admin
@@ -211,3 +211,153 @@ def update_note_report(
         status_code=409,
         detail="Report already processed",
     )
+# weavemo-backend-mock/routers/admin_notes.py
+# 기존 코드 맨 아래에 추가
+
+class ModerationActionRequest(BaseModel):
+    action: Literal["warning", "messaging_restriction"]
+    reason: str = Field(min_length=1, max_length=1000)
+    internal_note: str = Field(default="", max_length=2000)
+    duration_days: Literal[1, 3, 7] | None = None
+
+
+@router.post("/note-reports/{report_id}/moderation")
+def apply_note_moderation(
+    body: ModerationActionRequest,
+    report_id: int = Path(..., ge=1, le=MAX_BIGINT),
+    admin=Depends(require_admin),
+):
+    reason = body.reason.strip()
+    internal_note = body.internal_note.strip()
+
+    if not reason:
+        raise HTTPException(
+            status_code=400,
+            detail="A moderation reason is required",
+        )
+
+    if (
+        body.action == "warning"
+        and body.duration_days is not None
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Warnings must not include a duration",
+        )
+
+    if (
+        body.action == "messaging_restriction"
+        and body.duration_days is None
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="A restriction duration is required",
+        )
+
+    try:
+        result = get_supabase().rpc(
+            "weavemo_apply_note_moderation",
+            {
+                # 관리자 ID는 요청 본문이 아닌 인증 결과를 사용한다.
+                "p_admin": int(admin["user_id"]),
+                "p_report_id": report_id,
+                "p_action": body.action,
+                "p_reason": reason,
+                "p_internal_note": internal_note,
+                "p_duration_days": body.duration_days,
+            },
+        ).execute()
+    except Exception as error:
+        logger.exception("Applying note moderation failed")
+
+        raise HTTPException(
+            status_code=503,
+            detail="Could not confirm moderation result",
+        ) from error
+
+    data = result.data
+
+    if not isinstance(data, dict):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid moderation response",
+        )
+
+    errors = {
+        "invalid_request": (
+            400,
+            "Invalid moderation request",
+        ),
+        "not_found": (
+            404,
+            "Report not found",
+        ),
+        "admin_required": (
+            403,
+            "Admin access required",
+        ),
+        "self_action_not_allowed": (
+            403,
+            "Cannot apply moderation to yourself",
+        ),
+        "report_changed": (
+            409,
+            "Report changed; refresh before continuing",
+        ),
+        "already_processed": (
+            409,
+            "Report already processed",
+        ),
+    }
+
+    error_code = data.get("error")
+
+    if error_code:
+        status_code, detail = errors.get(
+            error_code,
+            (503, "Could not confirm moderation result"),
+        )
+
+        raise HTTPException(
+            status_code=status_code,
+            detail=detail,
+        )
+
+    action_id = data.get("id")
+
+    valid_id = (
+        isinstance(action_id, str)
+        and action_id.isascii()
+        and action_id.isdecimal()
+        and len(action_id) <= 19
+        and 0 < int(action_id) <= MAX_BIGINT
+    )
+
+    if (
+        not valid_id
+        or data.get("applied") is not True
+        or data.get("report_id") != str(report_id)
+        or data.get("action") != body.action
+        or not isinstance(data.get("target_user_id"), str)
+        or (
+            body.action == "messaging_restriction"
+            and not isinstance(data.get("expires_at"), str)
+        )
+        or (
+            body.action == "warning"
+            and data.get("expires_at") is not None
+        )
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid moderation response",
+        )
+
+    return {
+        "id": action_id,
+        "report_id": data["report_id"],
+        "target_user_id": data["target_user_id"],
+        "action": data["action"],
+        "expires_at": data.get("expires_at"),
+        "applied": True,
+    }
