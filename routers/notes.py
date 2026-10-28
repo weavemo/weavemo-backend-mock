@@ -557,3 +557,77 @@ def delete_note(
         "id": str(note_id),
         "deleted": True,
     }
+# weavemo-backend-mock/routers/notes.py
+# 기존 코드 맨 아래에 추가
+
+class NoteReportRequest(BaseModel):
+    reason: Literal[
+        "spam",
+        "harassment",
+        "sexual_content",
+        "threat",
+        "other",
+    ]
+    details: str = Field(default="", max_length=1000)
+
+
+@router.post("/{note_id}/report")
+def report_note(
+    body: NoteReportRequest,
+    note_id: int = Path(..., ge=1, le=MAX_BIGINT),
+    current_user=Depends(get_current_user),
+):
+    try:
+        result = get_supabase().rpc(
+            "weavemo_report_note",
+            {
+                "p_actor": int(current_user["user_id"]),
+                "p_note_id": note_id,
+                "p_reason": body.reason,
+                "p_details": body.details,
+            },
+        ).execute()
+    except APIError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Could not submit note report",
+        ) from error
+
+    data = result.data
+
+    if not isinstance(data, dict):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid report response",
+        )
+
+    if data.get("error") == "not_available":
+        raise HTTPException(
+            status_code=404,
+            detail="Note not available",
+        )
+
+    if data.get("error"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid report request",
+        )
+
+    report_id = data.get("id")
+
+    if (
+        data.get("reported") is not True
+        or not isinstance(report_id, str)
+        or not report_id.isascii()
+        or not report_id.isdecimal()
+        or not 0 < int(report_id) <= MAX_BIGINT
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid report response",
+        )
+
+    return {
+        "id": report_id,
+        "reported": True,
+    }
