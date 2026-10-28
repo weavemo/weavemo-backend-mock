@@ -1,6 +1,7 @@
 # main.py
 
 from routers import friends
+from routers import moderation
 from routers import presence
 from routers import admin_notes
 from fastapi import FastAPI
@@ -97,4 +98,9 @@ app.include_router(
     admin_notes.router,
     prefix="/admin",
     tags=["Admin"],
+)
+app.include_router(
+    moderation.router,
+    prefix="/moderation",
+    tags=["Moderation"],
 )
