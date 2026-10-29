@@ -175,7 +175,7 @@ def increment_xp(
         },
     ).execute()
 
-    return result.dataf
+    return result.data
 
 @router.post("/actions/feedback")
 def save_action_feedback(
