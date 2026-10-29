@@ -137,23 +137,30 @@ class ProfileUpdateRequest(BaseModel):
     ] = None
 
 
-@router.get("/me")
-def get_my_profile(
-    current_user=Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(bearer),
-):
-    supabase = get_supabase()
-    user_id = current_user["user_id"]
+# weavemo-backend-mock/routers/user.py
+# get_my_profile 함수 위에 추가
 
+def verify_profile_auth_user(supabase, token: str, auth_uid: str):
     try:
-        auth_response = supabase.auth.get_user(
-            credentials.credentials
-        )
-        auth_user = auth_response.user
-        
+        response = supabase.auth.get_user(token)
     except Exception as error:
         error_code = getattr(error, "code", None)
         error_status = getattr(error, "status", None)
+
+        missing_session = (
+            "session from session_id claim in jwt does not exist"
+            in str(error).lower()
+        )
+
+        # 토큰·이메일·오류 원문은 출력하지 않는다.
+        print(
+            "[user/me] auth verification failed:",
+            f"type={type(error).__name__}",
+            f"code={error_code}",
+            f"status={error_status}",
+            f"missing_session={missing_session}",
+            flush=True,
+        )
 
         session_error_codes = {
             "session_not_found",
@@ -162,12 +169,6 @@ def get_my_profile(
             "refresh_token_already_used",
             "bad_jwt",
         }
-
-        # 현재 확인된 Supabase 오류 문구도 대응
-        missing_session = (
-            "session from session_id claim in jwt does not exist"
-            in str(error).lower()
-        )
 
         if (
             error_code in session_error_codes
@@ -180,23 +181,40 @@ def get_my_profile(
                 headers={"WWW-Authenticate": "Bearer"},
             ) from error
 
-        print(
-            "[user/me] Supabase auth lookup failed:",
-            type(error).__name__,
-            str(error),
-            flush=True,
-        )
-
         raise HTTPException(
             status_code=503,
             detail="Could not verify account email",
         ) from error
 
-    if not auth_user or auth_user.id != current_user["auth_uid"]:
+    auth_user = response.user
+
+    if not auth_user or auth_user.id != auth_uid:
+        print(
+            "[user/me] auth verification failed:",
+            "reason=account_mismatch",
+            flush=True,
+        )
+
         raise HTTPException(
             status_code=401,
             detail="Account mismatch",
         )
+
+    return auth_user
+
+@router.get("/me")   
+def get_my_profile(
+    current_user=Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+
+    auth_user = verify_profile_auth_user(
+        supabase,
+        credentials.credentials,
+        current_user["auth_uid"],
+    )
 
     verified_email = auth_user.email
 
