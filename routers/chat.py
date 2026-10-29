@@ -28,7 +28,8 @@ class ChatInvitationActionRequest(BaseModel):
 
 class ChatHeartbeatRequest(BaseModel):
     connection_id: UUID
-
+    is_viewing: bool = False
+    
 def call_chat_rpc(function_name: str, params: dict) -> dict:
     try:
         result = get_supabase().rpc(
@@ -544,9 +545,6 @@ def end_chat(
         "ended_by": data.get("ended_by"),
     }
 
-# weavemo-backend-mock/routers/chat.py
-# 기존 코드 맨 아래에 추가
-
 @router.post("/conversations/{conversation_id}/heartbeat")
 def chat_heartbeat(
     body: ChatHeartbeatRequest,
@@ -554,11 +552,12 @@ def chat_heartbeat(
     current_user=Depends(get_current_user),
 ):
     data = call_chat_rpc(
-        "weavemo_chat_heartbeat",
+        "weavemo_chat_view_heartbeat",
         {
             "p_actor": current_user["user_id"],
             "p_conversation_id": conversation_id,
             "p_connection_id": str(body.connection_id),
+            "p_is_viewing": body.is_viewing,
         },
     )
 
