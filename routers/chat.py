@@ -660,3 +660,46 @@ def end_my_active_chats(
         ) from error
 
     return {"ended_count": ended_count}
+# 채팅 메시지 신고
+
+class ReportChatMessageRequest(BaseModel):
+    reason: Literal[
+        "spam",
+        "harassment",
+        "sexual_content",
+        "threat",
+        "other",
+    ]
+    details: str = Field(default="", max_length=1000)
+
+
+@router.post("/messages/{message_id}/report")
+def report_chat_message(
+    body: ReportChatMessageRequest,
+    message_id: int = Path(..., ge=1, le=MAX_BIGINT),
+    current_user=Depends(get_current_user),
+):
+    data = call_chat_rpc(
+        "weavemo_report_chat_message",
+        {
+            # 신고자는 요청 본문이 아닌 로그인 정보로 결정한다.
+            "p_actor": current_user["user_id"],
+            "p_message_id": message_id,
+            "p_reason": body.reason,
+            "p_details": body.details.strip(),
+        },
+    )
+
+    if (
+        not is_valid_id(data.get("id"))
+        or data.get("reported") is not True
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid chat report response",
+        )
+
+    return {
+        "id": data["id"],
+        "reported": True,
+    }
