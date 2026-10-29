@@ -16,7 +16,8 @@ router = APIRouter()
 MAX_BIGINT = 9223372036854775807
 
 REPORT_COLUMNS = (
-    "id, note_id, reporter_id, reported_user_id, "
+    "id, report_kind, note_id, chat_message_id, "
+    "chat_conversation_id, reporter_id, reported_user_id, "
     "reason, details, status, created_at, reviewed_at"
 )
 
@@ -28,7 +29,22 @@ class ReportStatusRequest(BaseModel):
 def public_report(row: dict) -> dict:
     return {
         "id": str(row["id"]),
-        "note_id": str(row["note_id"]),
+        "report_kind": row["report_kind"],
+        "note_id": (
+            str(row["note_id"])
+            if row.get("note_id") is not None
+            else None
+        ),
+        "chat_message_id": (
+            str(row["chat_message_id"])
+            if row.get("chat_message_id") is not None
+            else None
+        ),
+        "chat_conversation_id": (
+            str(row["chat_conversation_id"])
+            if row.get("chat_conversation_id") is not None
+            else None
+        ),
         "reporter_id": str(row["reporter_id"]),
         "reported_user_id": str(row["reported_user_id"]),
         "reason": row["reason"],
@@ -106,7 +122,11 @@ def get_note_report(
     try:
         result = (
             supabase.table("note_reports")
-            .select(REPORT_COLUMNS)
+            .select(
+                REPORT_COLUMNS
+                + ", message_body_snapshot, "
+                "message_created_at_snapshot"
+            )
             .eq("id", report_id)
             .limit(1)
             .execute()
@@ -119,14 +139,45 @@ def get_note_report(
             )
 
         report = result.data[0]
+        note = None
+        chat_message = None
 
-        note_result = (
-            supabase.table("friend_notes")
-            .select("id, body, created_at")
-            .eq("id", report["note_id"])
-            .limit(1)
-            .execute()
-        )
+        if report["report_kind"] == "chat":
+            # 신고 당시 서버에 보존한 원문만 조회한다.
+            # 대화방의 다른 메시지는 조회하지 않는다.
+            chat_message = {
+                "id": str(report["chat_message_id"]),
+                "conversation_id": str(
+                    report["chat_conversation_id"]
+                ),
+                "sender_id": str(report["reported_user_id"]),
+                "body": report["message_body_snapshot"],
+                "created_at": report[
+                    "message_created_at_snapshot"
+                ],
+            }
+
+        elif report["report_kind"] == "note":
+            note_result = (
+                supabase.table("friend_notes")
+                .select("id, body, created_at")
+                .eq("id", report["note_id"])
+                .limit(1)
+                .execute()
+            )
+
+            if note_result.data:
+                row = note_result.data[0]
+
+                note = {
+                    "id": str(row["id"]),
+                    "body": row["body"],
+                    "created_at": row["created_at"],
+                }
+
+        else:
+            raise RuntimeError("Invalid report kind")
+
     except HTTPException:
         raise
     except Exception as error:
@@ -137,19 +188,10 @@ def get_note_report(
             detail="Could not load report",
         ) from error
 
-    note = note_result.data[0] if note_result.data else None
-
     return {
         "report": public_report(report),
-        "note": (
-            {
-                "id": str(note["id"]),
-                "body": note["body"],
-                "created_at": note["created_at"],
-            }
-            if note
-            else None
-        ),
+        "note": note,
+        "chat_message": chat_message,
     }
 
 
