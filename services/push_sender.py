@@ -179,7 +179,10 @@ def get_chat_payload(
             else f"You have a new message from {nickname}."
         )
 
-        target_path = f"/chat/with/{int(sender_id)}"
+        target_path = (
+            f"/chat/with/{int(sender_id)}"
+            f"?room={int(conversation_id)}"
+        )
 
     return {
         "title": "WeaveMo",
