@@ -1,6 +1,8 @@
 # C:\Users\myh03\project_weavemo\weavemo-backend-mock\routers\post_media.py
 
 import logging
+from fastapi.responses import Response
+from dependencies.auth import get_current_user
 from uuid import uuid4
 
 from fastapi import (
@@ -135,3 +137,53 @@ def upload_post_image(
         "mimeType": "image/webp",
         "sizeBytes": len(processed),
     }
+# 게시물 공개 범위와 차단 관계를 확인한 후 사진을 반환한다.
+@router.get("/{post_id}/media")
+def get_post_image(
+    post_id: int,
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    require_post_access(
+        supabase,
+        post_id,
+        current_user,
+    )
+
+    result = (
+        supabase.table("post_media")
+        .select("storage_path, mime_type")
+        .eq("post_id", post_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not result.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Image not found",
+        )
+
+    media = result.data[0]
+
+    try:
+        image_bytes = (
+            supabase.storage.from_(BUCKET)
+            .download(media["storage_path"])
+        )
+    except Exception:
+        logger.exception("Post image download failed")
+        raise HTTPException(
+            status_code=503,
+            detail="Image temporarily unavailable",
+        )
+
+    return Response(
+        content=image_bytes,
+        media_type=media["mime_type"],
+        headers={
+            # 권한이 바뀐 뒤에도 브라우저 캐시로 재사용되지 않게 한다.
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
