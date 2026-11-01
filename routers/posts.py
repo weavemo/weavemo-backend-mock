@@ -21,6 +21,40 @@ def _preview(text: str | None, n: int = 120) -> str:
     return t if len(t) <= n else t[:n] + "…"
 
 
+def _attach_author_names(supabase, rows: list[dict]) -> None:
+    author_ids = {
+        int(row["user_id"])
+        for row in rows
+        if not row.get("is_anon")
+        and row.get("user_id") is not None
+    }
+
+    names = {}
+
+    if author_ids:
+        result = (
+            supabase.table("users")
+            .select("id, nickname")
+            .in_("id", sorted(author_ids))
+            .execute()
+        )
+
+        names = {
+            int(user["id"]): (
+                (user.get("nickname") or "").strip() or "user"
+            )
+            for user in (result.data or [])
+        }
+
+    for row in rows:
+        if row.get("is_anon"):
+            row["_author_name"] = "익명"
+        else:
+            row["_author_name"] = names.get(
+                int(row["user_id"]),
+                "user",
+            )
+
 def _post_to_dto(p: dict, current_user: dict, *, include_content: bool) -> dict:
     is_anon = bool(p.get("is_anon"))
     is_mine = (p.get("user_id") == current_user["user_id"])
@@ -31,7 +65,9 @@ def _post_to_dto(p: dict, current_user: dict, *, include_content: bool) -> dict:
         "category": p.get("category"),
         "title": p.get("title"),
         "createdAt": p.get("created_at"),
-        "authorDisplayName": "익명" if is_anon else "user",  # TODO: nickname
+        "authorDisplayName": (
+            "익명" if is_anon else p.get("_author_name", "user")
+        ),
         "isAnonymous": is_anon,
         "isMine": is_mine,
         "commentCount": p.get("comments_count", 0),
@@ -225,6 +261,7 @@ def list_posts(
         r["_is_liked"] = (r.get("id") in liked_ids)
 
     items = [_post_to_dto(p, current_user, include_content=False) for p in rows]
+    _attach_author_names(supabase, rows)
     next_cursor = None
     if rows:
         last = rows[-1]
@@ -284,6 +321,7 @@ def create_post(
     if not row:
         raise HTTPException(status_code=500, detail="Insert failed")
 
+    _attach_author_names(supabase, [row])
     return _post_to_dto(row, current_user, include_content=True)
 
 
@@ -331,7 +369,10 @@ def get_post_detail(
     )
     post["_is_liked"] = bool(like_res.data or [])
 
+    _attach_author_names(supabase, [post])
     return _post_to_dto(post, current_user, include_content=True)
+
+
 # 🔹 POST /posts/{id}/like  (로그인만)
 @router.post("/{post_id}/like")
 def like_post(
@@ -368,6 +409,9 @@ def like_post(
     except APIError as e:
         if e.code != "23505":
             raise
+
+    lc = _recalc_likes_count(supabase, post_id)
+    return {"liked": True, "likesCount": lc}
 
 
 # 🔹 DELETE /posts/{id}/like  (로그인만)
