@@ -11,6 +11,7 @@ from services.post_access import require_post_access
 router = APIRouter()
 
 ALLOWED_CATEGORIES = {"share", "question", "thanks"}
+ALLOWED_VISIBILITIES = {"public", "friends", "private"}
 
 
 def _preview(text: str | None, n: int = 120) -> str:
@@ -26,6 +27,7 @@ def _post_to_dto(p: dict, current_user: dict, *, include_content: bool) -> dict:
 
     dto = {
         "id": p.get("id"),
+        "visibility": p.get("visibility"),
         "category": p.get("category"),
         "title": p.get("title"),
         "createdAt": p.get("created_at"),
@@ -192,6 +194,18 @@ def create_post(
     current_user=Depends(require_premium),  # 프리미엄만
     supabase=Depends(get_supabase),
 ):
+
+    # 기존 클라이언트가 공개 범위를 보내지 않으면 public을 유지한다.
+    visibility = body.get("visibility", "public")
+
+    if (
+        not isinstance(visibility, str)
+        or visibility not in ALLOWED_VISIBILITIES
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid visibility",
+        )
     category = body.get("category")
     if category not in ALLOWED_CATEGORIES:
         raise HTTPException(status_code=400, detail="Invalid category")
@@ -210,7 +224,7 @@ def create_post(
         "title": title,
         "content": content,
         "is_anon": bool(body.get("isAnonymous", False)),
-        "visibility": "public",
+        "visibility": visibility,
         "created_at": datetime.utcnow().isoformat(),
         "comments_count": 0,
         "likes_count": 0,
