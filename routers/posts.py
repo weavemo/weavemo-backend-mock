@@ -6,6 +6,7 @@ from postgrest.exceptions import APIError
 from dependencies.auth import get_current_user
 from dependencies.premium import require_premium
 from db.database import get_supabase
+from services.post_access import require_post_access
 
 router = APIRouter()
 
@@ -200,19 +201,11 @@ def get_post_detail(
     current_user=Depends(get_current_user),  # 로그인 필수
     supabase=Depends(get_supabase),
 ):
-    res = (
-        supabase.table("posts")
-        .select("id, user_id, category, title, content, created_at, is_anon, comments_count, likes_count, view_count, visibility")
-        .eq("id", post_id)
-        .eq("visibility", "public")
-        .limit(1)
-        .execute()
+    post = require_post_access(
+        supabase,
+        post_id,
+        current_user,
     )
-
-    if not res.data:
-        raise HTTPException(status_code=404, detail="Post not found")
-
-    post = res.data[0]
 
     # viewCount 옵션2: 유저/게시글/하루 1회만 +1
     today = date.today().isoformat()
@@ -255,16 +248,11 @@ def like_post(
     supabase=Depends(get_supabase),
 ):
     # 공개글만
-    post_res = (
-        supabase.table("posts")
-        .select("id, likes_count, visibility")
-        .eq("id", post_id)
-        .eq("visibility", "public")
-        .limit(1)
-        .execute()
+    require_post_access(
+        supabase,
+        post_id,
+        current_user,
     )
-    if not (post_res.data or []):
-        raise HTTPException(status_code=404, detail="Post not found")
 
     # 이미 좋아요면 멱등
     exist = (
@@ -286,12 +274,8 @@ def like_post(
             {"user_id": current_user["user_id"], "post_id": post_id}
         ).execute()
     except APIError as e:
-        # 유니크 제약 등으로 이미 존재하면 멱등하게 성공 처리
-        # (정교하게 하려면 e.code로 unique violation만 골라내도 됨)
-        pass
-
-    lc = _recalc_likes_count(supabase, post_id)
-    return {"liked": True, "likesCount": lc}
+        if e.code != "23505":
+            raise
 
 
 # 🔹 DELETE /posts/{id}/like  (로그인만)
@@ -301,16 +285,11 @@ def unlike_post(
     current_user=Depends(get_current_user),
     supabase=Depends(get_supabase),
 ):
-    post_res = (
-        supabase.table("posts")
-        .select("id, likes_count, visibility")
-        .eq("id", post_id)
-        .eq("visibility", "public")
-        .limit(1)
-        .execute()
+    require_post_access(
+        supabase,
+        post_id,
+        current_user,
     )
-    if not (post_res.data or []):
-        raise HTTPException(status_code=404, detail="Post not found")
 
     del_res = (
         supabase.table("post_likes")
