@@ -55,6 +55,35 @@ def _attach_author_names(supabase, rows: list[dict]) -> None:
                 "user",
             )
 
+# 조회 권한이 확인된 게시물들의 사진 유무를 한 번에 확인한다.
+def _attach_photo_flags(supabase, rows: list[dict]) -> None:
+    post_ids = [
+        int(row["id"])
+        for row in rows
+        if row.get("id") is not None
+    ]
+
+    photo_post_ids = set()
+
+    if post_ids:
+        result = (
+            supabase.table("post_media")
+            .select("post_id")
+            .in_("post_id", post_ids)
+            .execute()
+        )
+
+        photo_post_ids = {
+            int(media["post_id"])
+            for media in (result.data or [])
+        }
+
+    for row in rows:
+        row["_has_photo"] = (
+            row.get("id") is not None
+            and int(row["id"]) in photo_post_ids
+        )
+
 def _post_to_dto(p: dict, current_user: dict, *, include_content: bool) -> dict:
     is_anon = bool(p.get("is_anon"))
     is_mine = (p.get("user_id") == current_user["user_id"])
@@ -62,6 +91,7 @@ def _post_to_dto(p: dict, current_user: dict, *, include_content: bool) -> dict:
     dto = {
         "id": p.get("id"),
         "visibility": p.get("visibility"),
+        "hasPhoto": bool(p.get("_has_photo", False)),
         "category": p.get("category"),
         "title": p.get("title"),
         "createdAt": p.get("created_at"),
@@ -261,8 +291,9 @@ def list_posts(
         r["_is_liked"] = (r.get("id") in liked_ids)
 
     _attach_author_names(supabase, rows)
-    items = [_post_to_dto(p, current_user, include_content=False) for p in rows]
-    
+    _attach_photo_flags(supabase, rows)
+    items = [_post_to_dto(p, current_user, include_content=False) for p in rows]    
+  
     next_cursor = None
     if rows:
         last = rows[-1]
@@ -371,6 +402,7 @@ def get_post_detail(
     post["_is_liked"] = bool(like_res.data or [])
 
     _attach_author_names(supabase, [post])
+    _attach_photo_flags(supabase, [post])
     return _post_to_dto(post, current_user, include_content=True)
 
 
