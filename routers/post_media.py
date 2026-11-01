@@ -59,7 +59,7 @@ def upload_post_image(
             detail="This post already has an image",
         )
 
-    # 全量を読み込む前に、読み取り量を制限する。
+    #     # 파일 전체를 읽지 않고 최대 허용 크기보다 1바이트까지만 읽는다.
     raw = file.file.read(MAX_UPLOAD_BYTES + 1)
     processed = prepare_post_image(raw)
 
@@ -96,7 +96,7 @@ def upload_post_image(
         )
     except APIError as exc:
         if exc.code == "23505":
-            # 同時アップロードで競合した、このリクエストの写真だけを削除する。
+             # 동시 업로드로 충돌하면 이번 요청이 올린 사진만 삭제한다.
             try:
                 bucket.remove([storage_path])
             except Exception:
@@ -113,8 +113,8 @@ def upload_post_image(
             detail="Could not save image information",
         )
     except Exception:
-        # DB保存済みで応答だけ失われた可能性があるため、
-        # この時点ではStorageの写真を削除しない。
+        # DB에는 저장됐지만 응답만 유실됐을 수 있으므로
+        # 이 단계에서는 Storage의 사진을 삭제하지 않는다.
         logger.exception("Post image metadata save uncertain")
         raise HTTPException(
             status_code=503,
