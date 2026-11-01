@@ -121,8 +121,38 @@ def list_posts(
             )
     else:
         raise HTTPException(status_code=400, detail="Invalid sort")
-    # 공개글만 (지금 정책: 읽기 로그인 필수지만 visibility는 public만 노출)
+    # 현재 목록은 공개글만 표시한다.
     query = query.eq("visibility", "public")
+
+    # 내가 차단한 사용자와 나를 차단한 사용자를 모두 제외한다.
+    user_id = int(current_user["user_id"])
+
+    outgoing_blocks = (
+        supabase.table("user_blocks")
+        .select("blocked_id")
+        .eq("blocker_id", user_id)
+        .execute()
+    )
+
+    incoming_blocks = (
+        supabase.table("user_blocks")
+        .select("blocker_id")
+        .eq("blocked_id", user_id)
+        .execute()
+    )
+
+    blocked_ids = {
+        int(row["blocked_id"])
+        for row in (outgoing_blocks.data or [])
+    }
+
+    blocked_ids.update(
+        int(row["blocker_id"])
+        for row in (incoming_blocks.data or [])
+    )
+
+    if blocked_ids:
+        query = query.not_.in_("user_id", sorted(blocked_ids))
 
     query = query.limit(limit)
     res = query.execute()
@@ -328,7 +358,7 @@ def delete_post(
     if post.get("user_id") != current_user["user_id"]:
         raise HTTPException(status_code=403, detail="Not allowed")
 
-    if post.get("visibility") != "public":
+    if post.get("visibility") == "deleted":
         return {"deleted": True}
 
     supabase.table("posts").update(
