@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 import time
 import httpx
-
+from services.post_access import require_post_access
 
 from dependencies.auth import get_current_user
 from dependencies.premium import require_premium
@@ -42,16 +42,12 @@ def list_comments(
     current_user=Depends(get_current_user),  # 로그인 필수
     supabase=Depends(get_supabase),
 ):
-   # 안정성 우선: 단순 2쿼리 방식 + retry
-    post_res = _execute_with_retry(
-        supabase.table("posts")
-        .select("id, visibility")
-        .eq("id", post_id)
-        .eq("visibility", "public")
-        .limit(1)
+    # 댓글 조회 전에 게시물 공개 범위와 양방향 차단 검사
+    require_post_access(
+        supabase,
+        post_id,
+        current_user,
     )
-    if not (post_res.data or []):
-        raise HTTPException(status_code=404, detail="Post not found")
 
     res = _execute_with_retry(
         supabase.table("comments")
@@ -72,16 +68,12 @@ def create_comment(
     current_user=Depends(require_premium),  # 프리미엄만
     supabase=Depends(get_supabase),
 ):
-    # 게시글 존재/공개 체크
-    post_res = _execute_with_retry(
-        supabase.table("posts")
-        .select("id, comments_count, visibility")
-        .eq("id", post_id)
-        .eq("visibility", "public")
-        .limit(1)
+    # 댓글 작성 전에 게시물 공개 범위와 양방향 차단 검사
+    post = require_post_access(
+        supabase,
+        post_id,
+        current_user,
     )
-    if not (post_res.data or []):
-        raise HTTPException(status_code=404, detail="Post not found")
 
     post = post_res.data[0]
     is_anon = bool(body.get("isAnonymous", False))
@@ -91,18 +83,18 @@ def create_comment(
     if len(content) > 500:
         raise HTTPException(status_code=400, detail="Content too long")
     
-    # 1) 댓글 insert
-    res = _execute_with_retry(
+    # 저장 요청은 자동 재시도하지 않는다.
+    # 서버에서 저장된 뒤 응답만 유실됐을 때 중복 생성되는 것을 방지한다.
+    res = (
         supabase.table("comments")
-        .insert(
-            {
-                "post_id": post_id,
-                "user_id": current_user["user_id"],
-                "content": content,
-                "is_anon": is_anon,
-                "created_at": datetime.utcnow().isoformat(),
-            }
-        )
+        .insert({
+            "post_id": post_id,
+            "user_id": current_user["user_id"],
+            "content": content,
+            "is_anon": is_anon,
+            "created_at": datetime.utcnow().isoformat(),
+        })
+        .execute()
     )
 
     row = (res.data or [None])[0]
