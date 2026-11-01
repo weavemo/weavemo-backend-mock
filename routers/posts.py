@@ -260,8 +260,9 @@ def list_posts(
     for r in rows:
         r["_is_liked"] = (r.get("id") in liked_ids)
 
-    items = [_post_to_dto(p, current_user, include_content=False) for p in rows]
     _attach_author_names(supabase, rows)
+    items = [_post_to_dto(p, current_user, include_content=False) for p in rows]
+    
     next_cursor = None
     if rows:
         last = rows[-1]
