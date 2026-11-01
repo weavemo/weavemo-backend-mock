@@ -24,6 +24,41 @@ def _execute_with_retry(builder, tries: int = 2):
             last = e
             time.sleep(0.15 * (i + 1))
     raise last
+
+def _attach_comment_author_names(supabase, rows: list[dict]) -> None:
+    author_ids = {
+        int(row["user_id"])
+        for row in rows
+        if not row.get("is_anon")
+        and row.get("user_id") is not None
+    }
+
+    names = {}
+
+    if author_ids:
+        result = (
+            supabase.table("users")
+            .select("id, nickname")
+            .in_("id", sorted(author_ids))
+            .execute()
+        )
+
+        names = {
+            int(user["id"]): (
+                (user.get("nickname") or "").strip() or "user"
+            )
+            for user in (result.data or [])
+        }
+
+    for row in rows:
+        if row.get("is_anon"):
+            row["_author_name"] = "익명"
+        else:
+            row["_author_name"] = names.get(
+                int(row["user_id"]),
+                "user",
+            )
+
 def _comment_to_dto(c: dict, current_user: dict) -> dict:
     is_anon = bool(c.get("is_anon"))
     return {
@@ -31,7 +66,9 @@ def _comment_to_dto(c: dict, current_user: dict) -> dict:
         "postId": c.get("post_id"),
         "content": c.get("content") or "",
         "createdAt": c.get("created_at"),
-        "authorDisplayName": "익명" if is_anon else "user",  # TODO: nickname
+        "authorDisplayName": (
+            "익명" if is_anon else c.get("_author_name", "user")
+        ),
         "isAnonymous": is_anon,
         "isMine": (c.get("user_id") == current_user["user_id"]),
     }
@@ -58,6 +95,7 @@ def list_comments(
     )
 
     rows = res.data or []
+    _attach_comment_author_names(supabase, rows)
     return {"items": [_comment_to_dto(c, current_user) for c in rows]}
 
 
@@ -107,4 +145,5 @@ def create_comment(
         .update({"comments_count": new_cc})
         .eq("id", post_id)
     )
+    _attach_comment_author_names(supabase, [row])
     return _comment_to_dto(row, current_user)
