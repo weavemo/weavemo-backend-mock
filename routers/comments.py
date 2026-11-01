@@ -75,7 +75,6 @@ def create_comment(
         current_user,
     )
 
-    post = post_res.data[0]
     is_anon = bool(body.get("isAnonymous", False))
     content = (body.get("content") or "").strip()
     if not content:
