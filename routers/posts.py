@@ -542,3 +542,142 @@ def delete_post(
             )
 
     return {"deleted": True}
+# 게시물 작성자만 허용된 항목을 수정할 수 있다.
+@router.patch("/{post_id}")
+def update_post(
+    post_id: int,
+    body: dict,
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    result = (
+        supabase.table("posts")
+        .select("id, user_id, visibility")
+        .eq("id", post_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not result.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Post not found",
+        )
+
+    post = result.data[0]
+
+    if int(post["user_id"]) != int(current_user["user_id"]):
+        raise HTTPException(
+            status_code=403,
+            detail="Not allowed",
+        )
+
+    if post.get("visibility") == "deleted":
+        raise HTTPException(
+            status_code=404,
+            detail="Post not found",
+        )
+
+    allowed_fields = {
+        "title",
+        "content",
+        "category",
+        "isAnonymous",
+        "visibility",
+    }
+
+    if not body or set(body) - allowed_fields:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid update fields",
+        )
+
+    changes = {}
+
+    # 문자열 형식과 길이를 서버에서도 검사한다.
+    for field, max_length in (("title", 80), ("content", 2000)):
+        if field not in body:
+            continue
+
+        value = body[field]
+
+        if not isinstance(value, str):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid {field}",
+            )
+
+        value = value.strip()
+
+        if field == "content" and not value:
+            raise HTTPException(
+                status_code=400,
+                detail="Content required",
+            )
+
+        if len(value) > max_length:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{field} too long",
+            )
+
+        changes[field] = value
+
+    if "category" in body:
+        value = body["category"]
+
+        if not isinstance(value, str) or value not in ALLOWED_CATEGORIES:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid category",
+            )
+
+        changes["category"] = value
+
+    if "visibility" in body:
+        value = body["visibility"]
+
+        if not isinstance(value, str) or value not in ALLOWED_VISIBILITIES:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid visibility",
+            )
+
+        changes["visibility"] = value
+
+    if "isAnonymous" in body:
+        if not isinstance(body["isAnonymous"], bool):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid anonymous setting",
+            )
+
+        changes["is_anon"] = body["isAnonymous"]
+
+    changes["updated_at"] = datetime.utcnow().isoformat()
+
+    # 삭제된 게시물이 동시 수정 요청으로 복구되지 않도록 조건을 유지한다.
+    updated = (
+        supabase.table("posts")
+        .update(changes)
+        .eq("id", post_id)
+        .eq("user_id", current_user["user_id"])
+        .neq("visibility", "deleted")
+        .execute()
+    )
+
+    if not updated.data:
+        raise HTTPException(
+            status_code=409,
+            detail="Post changed or is no longer available",
+        )
+
+    row = updated.data[0]
+    _attach_author_names(supabase, [row])
+    _attach_photo_flags(supabase, [row])
+
+    return _post_to_dto(
+        row,
+        current_user,
+        include_content=True,
+    )
