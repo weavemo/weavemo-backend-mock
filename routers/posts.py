@@ -477,6 +477,7 @@ def unlike_post(
 
 
 # 🔹 DELETE /posts/{id}  (작성자만) - 안전하게 soft delete
+# 게시물 작성자만 글을 삭제하고 연결된 사진을 정리한다.
 @router.delete("/{post_id}")
 def delete_post(
     post_id: int,
@@ -490,18 +491,54 @@ def delete_post(
         .limit(1)
         .execute()
     )
-    if not (post_res.data or []):
-        raise HTTPException(status_code=404, detail="Post not found")
+
+    if not post_res.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Post not found",
+        )
 
     post = post_res.data[0]
-    if post.get("user_id") != current_user["user_id"]:
-        raise HTTPException(status_code=403, detail="Not allowed")
 
-    if post.get("visibility") == "deleted":
-        return {"deleted": True}
+    if int(post["user_id"]) != int(current_user["user_id"]):
+        raise HTTPException(
+            status_code=403,
+            detail="Not allowed",
+        )
 
-    supabase.table("posts").update(
-        {"visibility": "deleted", "title": "(deleted)", "content": "[deleted]"}
-    ).eq("id", post_id).execute()
+    # 사진 정리가 실패하더라도 글과 사진에 대한 접근은 먼저 막는다.
+    if post.get("visibility") != "deleted":
+        supabase.table("posts").update({
+            "visibility": "deleted",
+            "title": "(deleted)",
+            "content": "[deleted]",
+        }).eq("id", post_id).execute()
+
+    # 이미 삭제된 글도 남은 사진 정리를 다시 시도한다.
+    media_res = (
+        supabase.table("post_media")
+        .select("id, storage_path")
+        .eq("post_id", post_id)
+        .execute()
+    )
+
+    for media in media_res.data or []:
+        try:
+            # 파일 삭제에 성공한 뒤에만 연결 정보를 제거한다.
+            supabase.storage.from_("post-media").remove(
+                [media["storage_path"]]
+            )
+
+            supabase.table("post_media").delete().eq(
+                "id", media["id"]
+            ).eq("post_id", post_id).execute()
+        except Exception:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Post hidden but image cleanup incomplete; "
+                    "retry deleting the post"
+                ),
+            )
 
     return {"deleted": True}
