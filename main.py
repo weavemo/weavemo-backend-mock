@@ -1,6 +1,7 @@
 # main.py
 
 from routers import friends
+from routers import post_media
 from routers import moderation
 from routers import presence
 from routers import admin_notes
@@ -104,4 +105,9 @@ app.include_router(
     moderation.router,
     prefix="/moderation",
     tags=["Moderation"],
+)
+app.include_router(
+    post_media.router,
+    prefix="/posts",
+    tags=["PostMedia"],
 )
