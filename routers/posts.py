@@ -68,11 +68,19 @@ def _recalc_likes_count(supabase, post_id: int) -> int:
 def list_posts(
     sort: str = "latest",
     category: str = "all",
+    feed: str = "public",
     limit: int = 20,
     cursor: str | None = None,  # TODO: cursor 적용은 다음 단계에서 연결
     current_user=Depends(get_current_user),  # 로그인 필수
     supabase=Depends(get_supabase),
 ):
+
+    if feed not in {"public", "friends", "mine"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid feed",
+        )
+    
     if limit < 1 or limit > 50:
         raise HTTPException(status_code=400, detail="Invalid limit")
 
@@ -123,8 +131,48 @@ def list_posts(
             )
     else:
         raise HTTPException(status_code=400, detail="Invalid sort")
-    # 현재 목록은 공개글만 표시한다.
-    query = query.eq("visibility", "public")
+    
+    viewer_id = int(current_user["user_id"])
+
+    if feed == "mine":
+        # 내 게시물: 전체 공개·친구 공개·나만 보기 포함
+        query = (
+            query.eq("user_id", viewer_id)
+            .in_("visibility", ["public", "friends", "private"])
+        )
+
+    elif feed == "friends":
+        # 기존 친구 테이블에서 수락 완료된 관계만 조회한다.
+        relationships = (
+            supabase.table("friendships")
+            .select("user_low_id, user_high_id")
+            .eq("status", "accepted")
+            .or_(
+                f"user_low_id.eq.{viewer_id},"
+                f"user_high_id.eq.{viewer_id}"
+            )
+            .execute()
+        )
+
+        # 친구 피드에는 내 전체 공개·친구 공개 글도 포함한다.
+        author_ids = {viewer_id}
+
+        for relationship in relationships.data or []:
+            low_id = int(relationship["user_low_id"])
+            high_id = int(relationship["user_high_id"])
+
+            author_ids.add(
+                high_id if low_id == viewer_id else low_id
+            )
+
+        query = (
+            query.in_("user_id", sorted(author_ids))
+            .in_("visibility", ["public", "friends"])
+        )
+
+    else:
+        # 전체 공개 피드
+        query = query.eq("visibility", "public")
 
     # 내가 차단한 사용자와 나를 차단한 사용자를 모두 제외한다.
     user_id = int(current_user["user_id"])
