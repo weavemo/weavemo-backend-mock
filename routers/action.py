@@ -1,6 +1,6 @@
 #routers/action.py
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from db.database import get_supabase
 from dependencies.auth import get_current_user
 import traceback
@@ -37,6 +37,8 @@ def get_recommended_actions(current_user=Depends(get_current_user)):
 
 # file: weavemo-backend-mock/routers/action.py
 
+# routers/action.py
+
 @router.post("/complete")
 def complete_action(
     body: dict,
@@ -44,32 +46,54 @@ def complete_action(
 ):
     action_id = body.get("action_id")
 
-    if isinstance(action_id, bool):
-        action_id = None
-
-    try:
-        action_id = int(action_id)
-    except (TypeError, ValueError):
-        action_id = None
-
-    if action_id is None or action_id <= 0:
-        return {
-            "ok": False,
-            "error": "invalid_action_id",
-        }
+    if (
+        type(action_id) is not int
+        or not 0 < action_id <= 9223372036854775807
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid action ID",
+        )
 
     supabase = get_supabase()
 
+    params = {
+        "p_user_id": current_user["user_id"],
+        "p_auth_uid": current_user["auth_uid"],
+        "p_action_id": action_id,
+    }
+
+    # 전환 중인 기존 화면은 기존 완료 방식을 유지한다.
+    if "tz_offset_min" not in body:
+        result = supabase.rpc(
+            "complete_action_with_fragment",
+            params,
+        ).execute()
+
+        return result.data
+
+    tz_offset_min = body["tz_offset_min"]
+
+    if (
+        type(tz_offset_min) is not int
+        or not -840 <= tz_offset_min <= 840
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid timezone offset",
+        )
+
+    # 새 화면은 행동 완료와 XP 지급을 한 번에 처리한다.
+    params["p_tz_offset_min"] = tz_offset_min
+
+    # 저장 요청은 자동 재시도하지 않는다.
     result = supabase.rpc(
-        "complete_action_with_fragment",
-        {
-            "p_user_id": current_user["user_id"],
-            "p_auth_uid": current_user["auth_uid"],
-            "p_action_id": action_id,
-        },
+        "complete_action_with_rewards",
+        params,
     ).execute()
 
     return result.data
+
 
 @router.get("/completed/count")
 def get_completed_action_count(
