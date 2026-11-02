@@ -1,5 +1,6 @@
 # main.py
 
+from routers import community_blocks
 from routers import friends
 from routers import post_media
 from routers import moderation
@@ -117,4 +118,11 @@ app.include_router(
     community_reports.router,
     prefix="/posts",
     tags=["CommunityReports"],
+)
+
+# 게시물·댓글 작성자 차단 API를 등록한다.
+app.include_router(
+    community_blocks.router,
+    prefix="/posts",
+    tags=["CommunityBlocks"],
 )
