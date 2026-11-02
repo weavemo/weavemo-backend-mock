@@ -35,9 +35,7 @@ def get_recommended_actions(current_user=Depends(get_current_user)):
         traceback.print_exc()
         raise
 
-# file: weavemo-backend-mock/routers/action.py
 
-# routers/action.py
 
 @router.post("/complete")
 def complete_action(
@@ -45,6 +43,7 @@ def complete_action(
     current_user=Depends(get_current_user),
 ):
     action_id = body.get("action_id")
+    tz_offset_min = body.get("tz_offset_min")
 
     if (
         type(action_id) is not int
@@ -55,25 +54,7 @@ def complete_action(
             detail="Invalid action ID",
         )
 
-    supabase = get_supabase()
-
-    params = {
-        "p_user_id": current_user["user_id"],
-        "p_auth_uid": current_user["auth_uid"],
-        "p_action_id": action_id,
-    }
-
-    # 전환 중인 기존 화면은 기존 완료 방식을 유지한다.
-    if "tz_offset_min" not in body:
-        result = supabase.rpc(
-            "complete_action_with_fragment",
-            params,
-        ).execute()
-
-        return result.data
-
-    tz_offset_min = body["tz_offset_min"]
-
+    # 시간대가 빠진 요청을 임의로 UTC 기준으로 처리하지 않는다.
     if (
         type(tz_offset_min) is not int
         or not -840 <= tz_offset_min <= 840
@@ -83,13 +64,16 @@ def complete_action(
             detail="Invalid timezone offset",
         )
 
-    # 새 화면은 행동 완료와 XP 지급을 한 번에 처리한다.
-    params["p_tz_offset_min"] = tz_offset_min
-
+    # 행동 기록과 보상·XP 지급을 하나의 트랜잭션으로 처리한다.
     # 저장 요청은 자동 재시도하지 않는다.
-    result = supabase.rpc(
+    result = get_supabase().rpc(
         "complete_action_with_rewards",
-        params,
+        {
+            "p_user_id": current_user["user_id"],
+            "p_auth_uid": current_user["auth_uid"],
+            "p_action_id": action_id,
+            "p_tz_offset_min": tz_offset_min,
+        },
     ).execute()
 
     return result.data
