@@ -48,7 +48,8 @@ def delete_comment(
         .limit(1)
         .execute()
     )
-    if p_res.data and p_res.data[0].get("visibility") == "public":
+        # 공개 범위와 관계없이 댓글 삭제 시 댓글 수를 차감한다.
+    if p_res.data:
         new_cc = max(0, int(p_res.data[0].get("comments_count") or 0) - 1)
         supabase.table("posts").update({"comments_count": new_cc}).eq("id", c["post_id"]).execute()
 
