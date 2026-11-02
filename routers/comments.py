@@ -5,7 +5,7 @@ import time
 import httpx
 from services.post_access import require_post_access
 from routers.friends import get_blocked_ids
-
+from services.hidden_content import get_hidden_content_ids
 from dependencies.auth import get_current_user
 from dependencies.premium import require_premium
 from db.database import get_supabase
@@ -114,10 +114,20 @@ def list_comments(
         )
     }
 
+    # 현재 사용자가 개별적으로 숨긴 댓글 번호를 조회한다.
+    hidden_comment_ids = get_hidden_content_ids(
+        supabase,
+        viewer_id,
+        "comment",
+        [int(row["id"]) for row in rows],
+    )
+
+    # 작성자 차단과 개별 댓글 숨김을 모두 적용한다.
     visible_rows = [
         row
         for row in rows
         if int(row["user_id"]) not in blocked_ids
+        and int(row["id"]) not in hidden_comment_ids
     ]
 
     # 차단 필터를 통과한 댓글에만 작성자 표시 이름을 붙인다.
