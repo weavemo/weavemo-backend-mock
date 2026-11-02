@@ -1,8 +1,10 @@
 # weavemo-backend-mock/routers/posts.py
+
+
 from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException
 from postgrest.exceptions import APIError
-
+from services.hidden_content import get_hidden_content_ids
 from dependencies.auth import get_current_user
 from dependencies.premium import require_premium
 from db.database import get_supabase
@@ -136,79 +138,26 @@ def list_posts(
     category: str = "all",
     feed: str = "public",
     limit: int = 20,
-    cursor: str | None = None,  # TODO: cursor 적용은 다음 단계에서 연결
-    current_user=Depends(get_current_user),  # 로그인 필수
+    cursor: str | None = None,
+    current_user=Depends(get_current_user),
     supabase=Depends(get_supabase),
 ):
-
     if feed not in {"public", "friends", "mine"}:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid feed",
-        )
-    
+        raise HTTPException(status_code=400, detail="Invalid feed")
+
+    if sort not in {"latest", "popular"}:
+        raise HTTPException(status_code=400, detail="Invalid sort")
+
     if limit < 1 or limit > 50:
         raise HTTPException(status_code=400, detail="Invalid limit")
 
     if category != "all" and category not in ALLOWED_CATEGORIES:
         raise HTTPException(status_code=400, detail="Invalid category")
 
-    query = supabase.table("posts").select(
-        "id, user_id, category, title, content, created_at, is_anon, comments_count, likes_count, view_count, visibility"
-    )
-
-    if category != "all":
-        query = query.eq("category", category)
-
-    if sort == "latest":
-        query = query.order("created_at", desc=True).order("id", desc=True)
-        if cursor:
-            # cursor = "{created_at}|{id}"
-            try:
-                c_created_at, c_id = cursor.split("|", 1)
-                c_id = int(c_id)
-            except Exception:
-                raise HTTPException(status_code=400, detail="Invalid cursor")
-            # created_at < c_created_at OR (created_at == c_created_at AND id < c_id)
-            query = query.or_(
-                f"created_at.lt.{c_created_at},and(created_at.eq.{c_created_at},id.lt.{c_id})"
-            )    
-    elif sort == "popular":
-        query = (
-            query.order("comments_count", desc=True)
-            .order("created_at", desc=True)
-            .order("id", desc=True)
-        )
-        if cursor:
-            # cursor = "{comments_count}|{created_at}|{id}"
-            try:
-                c_comments, c_created_at, c_id = cursor.split("|", 2)
-                c_comments = int(c_comments)
-                c_id = int(c_id)
-            except Exception:
-                raise HTTPException(status_code=400, detail="Invalid cursor")
-            # comments_count < c_comments
-            # OR (comments_count==c_comments AND created_at < c_created_at)
-            # OR (comments_count==c_comments AND created_at==c_created_at AND id < c_id)
-            query = query.or_(
-                f"comments_count.lt.{c_comments},"
-                f"and(comments_count.eq.{c_comments},created_at.lt.{c_created_at}),"
-                f"and(comments_count.eq.{c_comments},created_at.eq.{c_created_at},id.lt.{c_id})"
-            )
-    else:
-        raise HTTPException(status_code=400, detail="Invalid sort")
-    
     viewer_id = int(current_user["user_id"])
+    author_ids = {viewer_id}
 
-    if feed == "mine":
-        # 내 게시물: 전체 공개·친구 공개·나만 보기 포함
-        query = (
-            query.eq("user_id", viewer_id)
-            .in_("visibility", ["public", "friends", "private"])
-        )
-
-    elif feed == "friends":
-        # 기존 친구 테이블에서 수락 완료된 관계만 조회한다.
+    if feed == "friends":
         relationships = (
             supabase.table("friendships")
             .select("user_low_id, user_high_id")
@@ -220,90 +169,202 @@ def list_posts(
             .execute()
         )
 
-        # 친구 피드에는 내 전체 공개·친구 공개 글도 포함한다.
-        author_ids = {viewer_id}
-
         for relationship in relationships.data or []:
             low_id = int(relationship["user_low_id"])
             high_id = int(relationship["user_high_id"])
-
             author_ids.add(
                 high_id if low_id == viewer_id else low_id
             )
 
-        query = (
-            query.in_("user_id", sorted(author_ids))
-            .in_("visibility", ["public", "friends"])
-        )
-
-    else:
-        # 전체 공개 피드
-        query = query.eq("visibility", "public")
-
-    # 내가 차단한 사용자와 나를 차단한 사용자를 모두 제외한다.
-    user_id = int(current_user["user_id"])
-
-    outgoing_blocks = (
+    outgoing = (
         supabase.table("user_blocks")
         .select("blocked_id")
-        .eq("blocker_id", user_id)
+        .eq("blocker_id", viewer_id)
         .execute()
     )
 
-    incoming_blocks = (
+    incoming = (
         supabase.table("user_blocks")
         .select("blocker_id")
-        .eq("blocked_id", user_id)
+        .eq("blocked_id", viewer_id)
         .execute()
     )
 
     blocked_ids = {
         int(row["blocked_id"])
-        for row in (outgoing_blocks.data or [])
+        for row in (outgoing.data or [])
     }
-
     blocked_ids.update(
         int(row["blocker_id"])
-        for row in (incoming_blocks.data or [])
+        for row in (incoming.data or [])
     )
 
-    if blocked_ids:
-        query = query.not_.in_("user_id", sorted(blocked_ids))
+    def make_cursor(row: dict) -> str:
+        if sort == "latest":
+            return f"{row['created_at']}|{row['id']}"
 
-    query = query.limit(limit)
-    res = query.execute()
-    rows = res.data or []
+        return (
+            f"{row['comments_count']}|"
+            f"{row['created_at']}|{row['id']}"
+        )
 
-    # isLiked 배치 조회
-    post_ids = [r["id"] for r in rows if r.get("id") is not None]
+    def fetch_batch(after: str | None) -> list[dict]:
+        # 매번 새 쿼리를 만들어 이전 커서 조건이 누적되지 않게 한다.
+        query = supabase.table("posts").select(
+            "id, user_id, category, title, content, created_at, "
+            "is_anon, comments_count, likes_count, view_count, visibility"
+        )
+
+        if category != "all":
+            query = query.eq("category", category)
+
+        if feed == "mine":
+            query = (
+                query.eq("user_id", viewer_id)
+                .in_("visibility", ["public", "friends", "private"])
+            )
+        elif feed == "friends":
+            query = (
+                query.in_("user_id", sorted(author_ids))
+                .in_("visibility", ["public", "friends"])
+            )
+        else:
+            query = query.eq("visibility", "public")
+
+        if blocked_ids:
+            query = query.not_.in_("user_id", sorted(blocked_ids))
+
+        if sort == "popular":
+            query = query.order("comments_count", desc=True)
+
+        query = (
+            query.order("created_at", desc=True)
+            .order("id", desc=True)
+        )
+
+        if after:
+            try:
+                parts = after.split("|")
+
+                if sort == "latest":
+                    timestamp, raw_id = parts
+                    comment_count = None
+                else:
+                    raw_count, timestamp, raw_id = parts
+                    comment_count = int(raw_count)
+
+                    if comment_count < 0:
+                        raise ValueError
+
+                # 날짜와 번호를 검증·정규화한 값만 필터에 사용한다.
+                timestamp = datetime.fromisoformat(timestamp).isoformat()
+                row_id = int(raw_id)
+
+                if not 0 < row_id <= 9223372036854775807:
+                    raise ValueError
+
+            except (ValueError, TypeError, OverflowError):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid cursor",
+                ) from None
+
+            if sort == "latest":
+                query = query.or_(
+                    f"created_at.lt.{timestamp},"
+                    f"and(created_at.eq.{timestamp},id.lt.{row_id})"
+                )
+            else:
+                query = query.or_(
+                    f"comments_count.lt.{comment_count},"
+                    f"and(comments_count.eq.{comment_count},"
+                    f"created_at.lt.{timestamp}),"
+                    f"and(comments_count.eq.{comment_count},"
+                    f"created_at.eq.{timestamp},id.lt.{row_id})"
+                )
+
+        result = query.limit(50).execute()
+        return result.data or []
+
+    rows: list[dict] = []
+    scan_cursor = cursor
+    next_cursor = None
+
+    while len(rows) < limit:
+        batch = fetch_batch(scan_cursor)
+
+        if not batch:
+            break
+
+        hidden_ids = get_hidden_content_ids(
+            supabase,
+            viewer_id,
+            "post",
+            [int(row["id"]) for row in batch],
+        )
+
+        for row in batch:
+            if int(row["id"]) in hidden_ids:
+                continue
+
+            rows.append(row)
+
+            if len(rows) == limit:
+                # 아직 반환하지 않은 글은 다음 요청에서 다시 조회한다.
+                next_cursor = make_cursor(row)
+                break
+
+        if len(rows) == limit:
+            break
+
+        if len(batch) < 50:
+            break
+
+        # 한 묶음이 모두 숨김이어도 다음 묶음으로 진행한다.
+        following_cursor = make_cursor(batch[-1])
+
+        if following_cursor == scan_cursor:
+            raise HTTPException(
+                status_code=503,
+                detail="Post pagination did not advance",
+            )
+
+        scan_cursor = following_cursor
+
+    post_ids = [int(row["id"]) for row in rows]
     liked_ids: set[int] = set()
+
     if post_ids:
-        like_res = (
+        result = (
             supabase.table("post_likes")
             .select("post_id")
-            .eq("user_id", current_user["user_id"])
+            .eq("user_id", viewer_id)
             .in_("post_id", post_ids)
             .execute()
         )
-        liked_ids = {x["post_id"] for x in (like_res.data or []) if x.get("post_id") is not None}
 
-    for r in rows:
-        r["_is_liked"] = (r.get("id") in liked_ids)
+        liked_ids = {
+            int(row["post_id"])
+            for row in (result.data or [])
+        }
+
+    for row in rows:
+        row["_is_liked"] = int(row["id"]) in liked_ids
 
     _attach_author_names(supabase, rows)
     _attach_photo_flags(supabase, rows)
-    items = [_post_to_dto(p, current_user, include_content=False) for p in rows]    
-  
-    next_cursor = None
-    if rows:
-        last = rows[-1]
-        if sort == "latest":
-            next_cursor = f"{last['created_at']}|{last['id']}"
-        else:
-            next_cursor = f"{last['comments_count']}|{last['created_at']}|{last['id']}"
 
-    return {"items": items, "nextCursor": next_cursor}
-
+    return {
+        "items": [
+            _post_to_dto(
+                row,
+                current_user,
+                include_content=False,
+            )
+            for row in rows
+        ],
+        "nextCursor": next_cursor,
+    }
 
 @router.post("")
 def create_post(
