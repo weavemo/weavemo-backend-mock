@@ -221,7 +221,7 @@ def get_notification_inbox(
 
     try:
         query = (
-            supabase.table("user_notifications")
+            supabase.table("weavemo_visible_notifications")
             .select(
                 "id, kind, title, body, target_path, "
                 "local_date, created_at, read_at"
@@ -269,7 +269,7 @@ def get_notification_unread_count(
 
     try:
         result = (
-            supabase.table("user_notifications")
+            supabase.table("weavemo_visible_notifications")
             .select("id", count="exact", head=True)
             .eq("user_id", user_id)
             .is_("read_at", "null")
@@ -305,7 +305,7 @@ def mark_notification_read(
 
     try:
         existing_result = (
-            supabase.table("user_notifications")
+            supabase.table("weavemo_visible_notifications")
             .select("id, read_at")
             .eq("id", notification_id)
             .eq("user_id", user_id)
@@ -350,7 +350,7 @@ def mark_notification_read(
             }
 
         latest_result = (
-            supabase.table("user_notifications")
+            supabase.table("weavemo_visible_notifications")
             .select("id, read_at")
             .eq("id", notification_id)
             .eq("user_id", user_id)
