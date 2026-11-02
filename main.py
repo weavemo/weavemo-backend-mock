@@ -2,6 +2,7 @@
 
 from routers import community_blocks
 from routers import friends
+from routers import hidden_content
 from routers import post_media
 from routers import moderation
 from routers import presence
@@ -125,4 +126,11 @@ app.include_router(
     community_blocks.router,
     prefix="/posts",
     tags=["CommunityBlocks"],
+)
+
+# 본인의 숨긴 콘텐츠 관리 API를 등록한다.
+app.include_router(
+    hidden_content.router,
+    prefix="/community/hidden-content",
+    tags=["HiddenContent"],
 )
