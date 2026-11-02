@@ -17,7 +17,8 @@ MAX_BIGINT = 9223372036854775807
 
 REPORT_COLUMNS = (
     "id, report_kind, note_id, chat_message_id, "
-    "chat_conversation_id, reporter_id, reported_user_id, "
+    "chat_conversation_id, post_id, comment_id, "
+    "reporter_id, reported_user_id, "
     "reason, details, status, created_at, reviewed_at"
 )
 
@@ -30,6 +31,16 @@ def public_report(row: dict) -> dict:
     return {
         "id": str(row["id"]),
         "report_kind": row["report_kind"],
+        "post_id": (
+            str(row["post_id"])
+            if row.get("post_id") is not None
+            else None
+        ),
+        "comment_id": (
+            str(row["comment_id"])
+            if row.get("comment_id") is not None
+            else None
+        ),
         "note_id": (
             str(row["note_id"])
             if row.get("note_id") is not None
@@ -125,7 +136,7 @@ def get_note_report(
             .select(
                 REPORT_COLUMNS
                 + ", message_body_snapshot, "
-                "message_created_at_snapshot"
+                "message_created_at_snapshot, content_snapshot"
             )
             .eq("id", report_id)
             .limit(1)
@@ -141,6 +152,7 @@ def get_note_report(
         report = result.data[0]
         note = None
         chat_message = None
+        community_content = None
 
         if report["report_kind"] == "chat":
             # 신고 당시 서버에 보존한 원문만 조회한다.
@@ -175,6 +187,17 @@ def get_note_report(
                     "created_at": row["created_at"],
                 }
 
+        elif report["report_kind"] in ("post", "comment"):
+            # 원본이 수정되거나 삭제되어도 신고 당시 내용을 확인한다.
+            snapshot = report.get("content_snapshot")
+
+            if not isinstance(snapshot, dict):
+                raise RuntimeError(
+                    "Invalid community report snapshot"
+                )
+
+            community_content = snapshot
+        
         else:
             raise RuntimeError("Invalid report kind")
 
@@ -192,6 +215,7 @@ def get_note_report(
         "report": public_report(report),
         "note": note,
         "chat_message": chat_message,
+        "community_content":community_content,
     }
 
 
