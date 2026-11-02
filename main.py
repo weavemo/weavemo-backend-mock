@@ -1,6 +1,7 @@
 # main.py
 
 from routers import community_blocks
+from routers import dust
 from routers import friends
 from routers import hidden_content
 from routers import post_media
@@ -133,4 +134,10 @@ app.include_router(
     hidden_content.router,
     prefix="/community/hidden-content",
     tags=["HiddenContent"],
+)
+
+app.include_router(
+    dust.router,
+    prefix="/dust",
+    tags=["Dust"],
 )
