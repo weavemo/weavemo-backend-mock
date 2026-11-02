@@ -4,6 +4,7 @@ from routers import friends
 from routers import post_media
 from routers import moderation
 from routers import presence
+from routers import community_reports
 from routers import admin_notes
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -110,4 +111,10 @@ app.include_router(
     post_media.router,
     prefix="/posts",
     tags=["PostMedia"],
+)
+# 게시물·댓글 신고 API를 등록한다.
+app.include_router(
+    community_reports.router,
+    prefix="/posts",
+    tags=["CommunityReports"],
 )
