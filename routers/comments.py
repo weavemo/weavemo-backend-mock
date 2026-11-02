@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 import time
 import httpx
 from services.post_access import require_post_access
+from routers.friends import get_blocked_ids
 
 from dependencies.auth import get_current_user
 from dependencies.premium import require_premium
@@ -95,8 +96,39 @@ def list_comments(
     )
 
     rows = res.data or []
-    _attach_comment_author_names(supabase, rows)
-    return {"items": [_comment_to_dto(c, current_user) for c in rows]}
+    viewer_id = int(current_user["user_id"])
+
+    author_ids = sorted({
+        int(row["user_id"])
+        for row in rows
+        if int(row["user_id"]) != viewer_id
+    })
+
+    # 어느 한쪽이라도 차단한 관계라면 해당 작성자의 댓글을 숨긴다.
+    blocked_ids = {
+        int(user_id)
+        for user_id in get_blocked_ids(
+            supabase,
+            viewer_id,
+            author_ids,
+        )
+    }
+
+    visible_rows = [
+        row
+        for row in rows
+        if int(row["user_id"]) not in blocked_ids
+    ]
+
+    # 차단 필터를 통과한 댓글에만 작성자 표시 이름을 붙인다.
+    _attach_comment_author_names(supabase, visible_rows)
+
+    return {
+        "items": [
+            _comment_to_dto(row, current_user)
+            for row in visible_rows
+        ]
+    }
 
 
 @router.post("/{post_id}/comments")
