@@ -97,3 +97,46 @@ def assign_my_daily_mystery_quest(
         )
 
     return data
+
+# 오늘 배정된 미스터리 퀘스트의 진행도를 조회한다.
+@router.get("/mystery/daily")
+def get_my_daily_mystery_progress(
+    tz_offset_min: int = Query(..., ge=-840, le=840),
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    try:
+        # 인증된 본인의 기록만 조회한다.
+        result = supabase.rpc(
+            "get_daily_mystery_progress",
+            {
+                "p_user_id": current_user["user_id"],
+                "p_tz_offset_min": tz_offset_min,
+            },
+        ).execute()
+    except Exception as error:
+        logger.exception("Daily mystery progress lookup failed")
+
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load daily mystery progress",
+        ) from error
+
+    data = result.data
+
+    if (
+        not isinstance(data, dict)
+        or not isinstance(data.get("local_date"), str)
+        or data.get("tz_offset_min") != tz_offset_min
+        or "item" not in data
+        or (
+            data["item"] is not None
+            and not isinstance(data["item"], dict)
+        )
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid daily mystery progress response",
+        )
+
+    return data
