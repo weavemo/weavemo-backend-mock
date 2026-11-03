@@ -2,6 +2,7 @@
 
 from routers import community_blocks
 from routers import dust
+from routers import world
 from routers import quests
 from routers import friends
 from routers import hidden_content
@@ -147,4 +148,9 @@ app.include_router(
     quests.router,
     prefix="/quests",
     tags=["Quests"],
+)
+app.include_router(
+    world.router,
+    prefix="/world",
+    tags=["World"],
 )
