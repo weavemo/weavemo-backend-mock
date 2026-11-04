@@ -1,5 +1,6 @@
 # main.py
 
+from routers import companion_shop
 from routers import community_blocks
 from routers import dust
 from routers import world
@@ -153,4 +154,10 @@ app.include_router(
     world.router,
     prefix="/world",
     tags=["World"],
+)
+
+app.include_router(
+    companion_shop.router,
+    prefix="/world/shop",
+    tags=["Companion Shop"],
 )
