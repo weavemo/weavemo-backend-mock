@@ -5,7 +5,7 @@ from services.reward_ownership import (
     owned_reward_keys,
     valid_equipped_frame,
 )
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from db.database import get_supabase
@@ -182,4 +182,66 @@ def equip_reward(
     return {
         "type": body.type,
         "key": key,
+    }
+
+@router.get("/points")
+def get_my_points(
+    before_id: int | None = Query(default=None, ge=1),
+    current_user=Depends(get_current_user),
+):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+    page_size = 20
+
+    wallet_result = (
+        supabase.table("user_point_wallets")
+        .select("balance")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    balance = (
+        wallet_result.data[0]["balance"]
+        if wallet_result.data
+        else 0
+    )
+
+    query = (
+        supabase.table("point_transactions")
+        .select(
+            "id, source, amount, "
+            "balance_before, balance_after, created_at"
+        )
+        .eq("user_id", user_id)
+        .order("id", desc=True)
+        .limit(page_size + 1)
+    )
+
+    if before_id is not None:
+        query = query.lt("id", before_id)
+
+    rows = query.execute().data or []
+    has_more = len(rows) > page_size
+    items = rows[:page_size]
+
+    return {
+        "point_balance": balance,
+        "items": [
+            {
+                # 거래 번호는 문자열로 전달해 정밀도 손실을 막는다.
+                "id": str(row["id"]),
+                "source": row["source"],
+                "amount": row["amount"],
+                "balance_before": row["balance_before"],
+                "balance_after": row["balance_after"],
+                "created_at": row["created_at"],
+            }
+            for row in items
+        ],
+        "next_cursor": (
+            str(items[-1]["id"])
+            if has_more
+            else None
+        ),
     }
