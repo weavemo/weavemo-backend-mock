@@ -121,7 +121,9 @@ def warm_companion(
             detail="Invalid companion care response",
         )
 
+    validate_care_reward(data)
     return data
+    
 # 성장 시간 신호의 요청 형식을 정의한다.
 class CompanionGrowthHeartbeatRequest(BaseModel):
     connection_id: UUID
@@ -348,19 +350,31 @@ def hatch_companion(
     return data
 
 # 부화 후 사용할 돌봄 종류.
+# 부화 후 돌봄 활동과 공통 기록의 연결.
 CARE_SOURCES = {
     "feed": "companion_feed",
     "water": "companion_water",
     "play": "companion_play",
     "sleep": "companion_sleep",
     "comfort": "companion_comfort",
+    "praise": "companion_praise",
 }
 
 
 class CompanionCareRequest(BaseModel):
-    action: Literal["feed", "water", "play", "sleep", "comfort"]
+    action: Literal[
+        "feed",
+        "water",
+        "play",
+        "sleep",
+        "comfort",
+        "praise",
+    ]
     tz_offset_min: int = Field(
-        ..., ge=-840, le=840, strict=True
+        ...,
+        ge=-840,
+        le=840,
+        strict=True,
     )
 
 
@@ -411,6 +425,7 @@ def care_companion(
             detail="Invalid companion care response",
         )
 
+    validate_care_reward(data)
     return data
 
 
@@ -465,3 +480,36 @@ def get_companion_care(
             if source in sources
         ],
     }
+
+# 돌봄 응답에 포함된 공통 포인트 결과를 검증한다.
+def validate_care_reward(data: dict) -> None:
+    gained = data.get("points_gained")
+    balance = data.get("point_balance")
+    already_completed = data.get("already_completed")
+    reason = data.get("reward_reason")
+
+    if (
+        type(gained) is not int
+        or gained < 0
+        or type(balance) is not int
+        or balance < 0
+        or gained > balance
+        or type(already_completed) is not bool
+        or reason not in (
+            "granted",
+            "already_completed",
+            "already_granted",
+            "rule_not_found",
+            "rule_disabled",
+            "zero_reward",
+            "event_not_today",
+            "daily_limit",
+        )
+        or (already_completed and gained != 0)
+        or (reason == "granted" and gained <= 0)
+        or (reason != "granted" and gained != 0)
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid care reward response",
+        )
