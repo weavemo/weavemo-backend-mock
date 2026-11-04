@@ -513,3 +513,97 @@ def validate_care_reward(data: dict) -> None:
             status_code=503,
             detail="Invalid care reward response",
         )
+
+# 홈에서 돌봄 미완료 여부와 공통 포인트를 조회한다.
+@router.get("/summary")
+def get_world_summary(
+    tz_offset_min: int = Query(..., ge=-840, le=840),
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    user_id = current_user["user_id"]
+    offset = timedelta(minutes=tz_offset_min)
+    today = (datetime.now(timezone.utc) + offset).date()
+
+    start = datetime.combine(
+        today, datetime.min.time(), tzinfo=timezone.utc
+    ) - offset
+    end = start + timedelta(days=1)
+
+    try:
+        companions = (
+            supabase.table("user_companions")
+            .select("stage")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+            .data
+        )
+
+        wallets = (
+            supabase.table("user_point_wallets")
+            .select("balance")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+            .data
+        )
+
+        if (
+            not isinstance(companions, list)
+            or not isinstance(wallets, list)
+        ):
+            raise ValueError("Invalid summary records")
+
+        stage = companions[0]["stage"] if companions else None
+        balance = wallets[0]["balance"] if wallets else 0
+
+        if (
+            stage not in (None, "egg", "hatched", "grown")
+            or type(balance) is not int
+            or balance < 0
+        ):
+            raise ValueError("Invalid summary values")
+
+        if stage == "egg":
+            required = {"companion_warm"}
+        elif stage in ("hatched", "grown"):
+            required = set(CARE_SOURCES.values())
+        else:
+            required = set()
+
+        # World가 없으면 첫 방문을 안내한다.
+        pending = stage is None
+
+        if required:
+            events = (
+                supabase.table("quest_activity_events")
+                .select("activity_source")
+                .eq("user_id", user_id)
+                .eq("source_id", f"daily:{today.isoformat()}")
+                .in_("activity_source", sorted(required))
+                .gte("occurred_at", start.isoformat())
+                .lt("occurred_at", end.isoformat())
+                .execute()
+                .data
+            )
+
+            if not isinstance(events, list):
+                raise ValueError("Invalid care records")
+
+            completed = {row["activity_source"] for row in events}
+            pending = not required.issubset(completed)
+
+    except Exception as error:
+        logger.exception("World summary lookup failed")
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load world summary",
+        ) from error
+
+    return {
+        "local_date": today.isoformat(),
+        "stage": stage,
+        "has_pending_care": pending,
+        "point_balance": balance,
+    }
