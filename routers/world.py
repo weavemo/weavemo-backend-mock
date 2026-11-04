@@ -193,17 +193,25 @@ def companion_growth_heartbeat(
 
     return data
 
-# 성장 상태를 변경하지 않고 현재 누적 시간만 조회한다.
+# 저장된 성장 시간과 서버 설정으로 남은 부화 시간을 계산한다.
 @router.get("/companion/growth")
 def get_companion_growth(
     current_user=Depends(get_current_user),
     supabase=Depends(get_supabase),
 ):
     try:
-        result = (
+        growth_result = (
             supabase.table("companion_growth_state")
             .select("egg_active_ms")
             .eq("user_id", current_user["user_id"])
+            .limit(1)
+            .execute()
+        )
+
+        settings_result = (
+            supabase.table("companion_growth_settings")
+            .select("required_active_ms,display_duration_ms")
+            .eq("key", "default")
             .limit(1)
             .execute()
         )
@@ -215,21 +223,59 @@ def get_companion_growth(
             detail="Could not load companion growth",
         ) from error
 
-    rows = result.data
+    growth_rows = growth_result.data
+    settings_rows = settings_result.data
 
-    if not isinstance(rows, list):
+    if (
+        not isinstance(growth_rows, list)
+        or not isinstance(settings_rows, list)
+        or len(settings_rows) != 1
+        or not isinstance(settings_rows[0], dict)
+        or (
+            growth_rows
+            and not isinstance(growth_rows[0], dict)
+        )
+    ):
         raise HTTPException(
             status_code=503,
             detail="Invalid companion growth response",
         )
 
-    # 아직 성장 신호를 받지 않았다면 누적 시간은 0이다.
-    total_ms = rows[0].get("egg_active_ms") if rows else 0
+    total_ms = (
+        growth_rows[0].get("egg_active_ms")
+        if growth_rows
+        else 0
+    )
 
-    if type(total_ms) is not int or total_ms < 0:
+    settings = settings_rows[0]
+    required_ms = settings.get("required_active_ms")
+    display_ms = settings.get("display_duration_ms")
+
+    if (
+        type(total_ms) is not int
+        or total_ms < 0
+        or type(required_ms) is not int
+        or required_ms <= 0
+        or type(display_ms) is not int
+        or display_ms <= 0
+    ):
         raise HTTPException(
             status_code=503,
-            detail="Invalid companion growth response",
+            detail="Invalid companion growth settings",
         )
 
-    return {"egg_active_ms": total_ms}
+    remaining_active_ms = max(0, required_ms - total_ms)
+
+    # 정수 계산으로 남은 표시 시간을 올림 처리한다.
+    remaining_display_ms = (
+        display_ms * remaining_active_ms + required_ms - 1
+    ) // required_ms
+
+    return {
+        "egg_active_ms": total_ms,
+        "required_active_ms": required_ms,
+        "display_duration_ms": display_ms,
+        "remaining_active_ms": remaining_active_ms,
+        "remaining_display_ms": remaining_display_ms,
+        "ready_to_hatch": remaining_active_ms == 0,
+    }
