@@ -279,3 +279,69 @@ def get_companion_growth(
         "remaining_display_ms": remaining_display_ms,
         "ready_to_hatch": remaining_active_ms == 0,
     }
+
+# 서버의 누적 시간 조건을 확인한 뒤 동물을 부화시킨다.
+@router.post("/companion/hatch")
+def hatch_companion(
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    user_id = current_user["user_id"]
+
+    try:
+        result = supabase.rpc(
+            "hatch_my_companion",
+            {
+                "p_user_id": user_id,
+            },
+        ).execute()
+    except Exception as error:
+        logger.exception("Companion hatching failed")
+
+        raise HTTPException(
+            status_code=503,
+            detail="Could not hatch companion",
+        ) from error
+
+    data = result.data
+
+    if not isinstance(data, dict):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid companion hatch response",
+        )
+
+    # 시간 미충족은 정상적인 처리 결과로 반환한다.
+    if data.get("ok") is False:
+        remaining_ms = data.get("remaining_active_ms")
+
+        if (
+            data.get("reason") != "not_ready"
+            or type(remaining_ms) is not int
+            or remaining_ms <= 0
+        ):
+            raise HTTPException(
+                status_code=503,
+                detail="Invalid companion hatch response",
+            )
+
+        return data
+
+    companion = data.get("companion")
+
+    if (
+        data.get("ok") is not True
+        or type(data.get("already_hatched")) is not bool
+        or not isinstance(companion, dict)
+        or str(companion.get("user_id")) != str(user_id)
+        or companion.get("stage") not in ("hatched", "grown")
+        or not isinstance(companion.get("species_key"), str)
+        or not companion["species_key"].strip()
+        or not isinstance(companion.get("hatched_at"), str)
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid companion hatch response",
+        )
+
+    return data
