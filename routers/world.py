@@ -192,3 +192,44 @@ def companion_growth_heartbeat(
         )
 
     return data
+
+# 성장 상태를 변경하지 않고 현재 누적 시간만 조회한다.
+@router.get("/companion/growth")
+def get_companion_growth(
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    try:
+        result = (
+            supabase.table("companion_growth_state")
+            .select("egg_active_ms")
+            .eq("user_id", current_user["user_id"])
+            .limit(1)
+            .execute()
+        )
+    except Exception as error:
+        logger.exception("Companion growth lookup failed")
+
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load companion growth",
+        ) from error
+
+    rows = result.data
+
+    if not isinstance(rows, list):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid companion growth response",
+        )
+
+    # 아직 성장 신호를 받지 않았다면 누적 시간은 0이다.
+    total_ms = rows[0].get("egg_active_ms") if rows else 0
+
+    if type(total_ms) is not int or total_ms < 0:
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid companion growth response",
+        )
+
+    return {"egg_active_ms": total_ms}
