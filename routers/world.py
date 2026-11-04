@@ -2,9 +2,10 @@
 
 import logging
 from uuid import UUID
-
+from datetime import datetime, timedelta, timezone
+from typing import Literal
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from db.database import get_supabase
 from dependencies.auth import get_current_user
@@ -345,3 +346,122 @@ def hatch_companion(
         )
 
     return data
+
+# 부화 후 사용할 돌봄 종류.
+CARE_SOURCES = {
+    "feed": "companion_feed",
+    "water": "companion_water",
+    "play": "companion_play",
+    "sleep": "companion_sleep",
+    "comfort": "companion_comfort",
+}
+
+
+class CompanionCareRequest(BaseModel):
+    action: Literal["feed", "water", "play", "sleep", "comfort"]
+    tz_offset_min: int = Field(
+        ..., ge=-840, le=840, strict=True
+    )
+
+
+@router.post("/companion/care")
+def care_companion(
+    body: CompanionCareRequest,
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    try:
+        result = supabase.rpc(
+            "care_my_companion",
+            {
+                "p_user_id": current_user["user_id"],
+                "p_tz_offset_min": body.tz_offset_min,
+                "p_action": body.action,
+            },
+        ).execute()
+    except Exception as error:
+        logger.exception("Companion care failed")
+        raise HTTPException(
+            status_code=503,
+            detail="Could not save companion care",
+        ) from error
+
+    data = result.data
+
+    if (
+        isinstance(data, dict)
+        and data.get("ok") is False
+        and data.get("reason") == "not_hatched"
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Companion has not hatched",
+        )
+
+    if (
+        not isinstance(data, dict)
+        or data.get("ok") is not True
+        or data.get("action") != body.action
+        or data.get("completed") is not True
+        or not isinstance(data.get("local_date"), str)
+        or type(data.get("already_completed")) is not bool
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid companion care response",
+        )
+
+    return data
+
+
+@router.get("/companion/care")
+def get_companion_care(
+    tz_offset_min: int = Query(..., ge=-840, le=840),
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+     # 브라우저와 같은 오프셋으로 오늘의 조회 범위를 계산한다.。
+    offset = timedelta(minutes=tz_offset_min)
+    today = (datetime.now(timezone.utc) + offset).date()
+    start = datetime.combine(
+        today, datetime.min.time(), tzinfo=timezone.utc
+    ) - offset
+    end = start + timedelta(days=1)
+
+    try:
+        result = (
+            supabase.table("quest_activity_events")
+            .select("activity_source")
+            .eq("user_id", current_user["user_id"])
+            .eq("source_id", f"daily:{today.isoformat()}")
+            .in_("activity_source", list(CARE_SOURCES.values()))
+            .gte("occurred_at", start.isoformat())
+            .lt("occurred_at", end.isoformat())
+            .execute()
+        )
+
+        rows = result.data
+
+        if not isinstance(rows, list) or any(
+            not isinstance(row, dict)
+            or row.get("activity_source") not in CARE_SOURCES.values()
+            for row in rows
+        ):
+            raise ValueError("Invalid care records")
+
+        sources = {row["activity_source"] for row in rows}
+    except Exception as error:
+        logger.exception("Companion care lookup failed")
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load companion care",
+        ) from error
+
+    return {
+        "local_date": today.isoformat(),
+        "completed_actions": [
+            action
+            for action, source in CARE_SOURCES.items()
+            if source in sources
+        ],
+    }
