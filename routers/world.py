@@ -1,7 +1,9 @@
 # routers/world.py
 
 import logging
+from uuid import UUID
 
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from db.database import get_supabase
@@ -116,6 +118,77 @@ def warm_companion(
         raise HTTPException(
             status_code=503,
             detail="Invalid companion care response",
+        )
+
+    return data
+# 성장 시간 신호의 요청 형식을 정의한다.
+class CompanionGrowthHeartbeatRequest(BaseModel):
+    connection_id: UUID
+    tz_offset_min: int = Field(
+        ...,
+        ge=-840,
+        le=840,
+        strict=True,
+    )
+    active: bool = Field(..., strict=True)
+
+
+@router.post("/companion/growth/heartbeat")
+def companion_growth_heartbeat(
+    body: CompanionGrowthHeartbeatRequest,
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    try:
+        # 사용자 ID와 누적 시간은 클라이언트에서 받지 않는다.
+        result = supabase.rpc(
+            "heartbeat_companion_growth",
+            {
+                "p_user_id": current_user["user_id"],
+                "p_connection_id": str(body.connection_id),
+                "p_tz_offset_min": body.tz_offset_min,
+                "p_active": body.active,
+            },
+        ).execute()
+    except Exception as error:
+        logger.exception("Companion growth heartbeat failed")
+
+        raise HTTPException(
+            status_code=503,
+            detail="Could not update companion growth",
+        ) from error
+
+    data = result.data
+
+    if not isinstance(data, dict):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid companion growth response",
+        )
+
+    total_ms = data.get("egg_active_ms")
+    added_ms = data.get("added_ms")
+
+    if (
+        type(data.get("initialized")) is not bool
+        or type(data.get("eligible")) is not bool
+        or data.get("reason") not in (
+            "world_not_initialized",
+            "another_connection",
+            "growing",
+            "not_egg",
+            "inactive",
+            "care_required",
+        )
+        or type(total_ms) is not int
+        or total_ms < 0
+        or type(added_ms) is not int
+        or not 0 <= added_ms <= 35000
+        or added_ms > total_ms
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid companion growth response",
         )
 
     return data
