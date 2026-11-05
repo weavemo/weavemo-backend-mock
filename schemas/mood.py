@@ -1,10 +1,20 @@
 # weavemo-backend/schemas/mood.py
 
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 from pydantic import BaseModel, Field
 
+
+MoodTriggerCode = Literal[
+    "people", "work", "health", "money", "weather", "other",
+    "study", "sleep", "family", "exercise", "rest", "life_change",
+]
+
+
+class MoodEmotionInput(BaseModel):
+    code: str = Field(min_length=1)
+    intensity: int = Field(strict=True, ge=1, le=5)
 
 class MoodInput(BaseModel):
     mainValence: int = Field(
@@ -20,6 +30,9 @@ class MoodInput(BaseModel):
 
     tagIds: Optional[List[str]] = None
     triggerType: Optional[str] = None
+    emotions: Optional[List[MoodEmotionInput]] = None
+    triggerTypes: Optional[List[MoodTriggerCode]] = None
+    triggerOtherText: Optional[str] = Field(default=None, max_length=200)
     note: Optional[str] = Field(
         default=None,
         max_length=200,
