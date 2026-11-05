@@ -26,28 +26,34 @@ def submit_mood(
     current_user=Depends(get_current_user),
 ):
     if payload.emotions is None:
-            tag_codes = payload.tagIds or []
-            emotions = [
-                {"code": code, "intensity": None}
-                for code in dict.fromkeys(tag_codes)
-            ]
-        else:
-            tag_codes = [emotion.code for emotion in payload.emotions]
-            if len(tag_codes) != len(set(tag_codes)):
-                raise HTTPException(status_code=400, detail="Duplicate emotion codes")
-    
-            emotions = [
-                {"code": emotion.code, "intensity": emotion.intensity}
-                for emotion in payload.emotions
-            ]
-    
-        trigger_types = list(dict.fromkeys(payload.triggerTypes or []))
-        other_text = (payload.triggerOtherText or "").strip() or None
-    
-        if other_text is not None and "other" not in trigger_types:
-            raise HTTPException(status_code=400, detail="Select the other trigger first")
+        tag_codes = payload.tagIds or []
+        emotions = [
+            {"code": code, "intensity": None}
+            for code in dict.fromkeys(tag_codes)
+        ]
+    else:
+        tag_codes = [emotion.code for emotion in payload.emotions]
+        if len(tag_codes) != len(set(tag_codes)):
+            raise HTTPException(
+                status_code=400,
+                detail="Duplicate emotion codes",
+            )
 
-        today = datetime.now(timezone.utc).date().isoformat()
+        emotions = [
+            {"code": emotion.code, "intensity": emotion.intensity}
+            for emotion in payload.emotions
+        ]
+
+    trigger_types = list(dict.fromkeys(payload.triggerTypes or []))
+    other_text = (payload.triggerOtherText or "").strip() or None
+
+    if other_text is not None and "other" not in trigger_types:
+        raise HTTPException(
+            status_code=400,
+            detail="Select the other trigger first",
+        )
+
+    today = datetime.now(timezone.utc).date().isoformat()
 
     try:
         result = supabase.rpc(
@@ -80,7 +86,6 @@ def submit_mood(
         note=payload.note,
         tagIds=tag_codes,
     )
-
 
 # --------------------------------------
 # Week 4 — Mood Analysis
