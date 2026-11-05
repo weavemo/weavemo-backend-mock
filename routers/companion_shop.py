@@ -20,6 +20,9 @@ class PurchaseRequest(BaseModel):
     )
     request_id: UUID
 
+class BlanketInstallRequest(BaseModel):
+    slot_number: int = Field(strict=True, ge=1, le=10)
+    request_id: UUID
 
 @router.get("/items")
 def get_shop_items(
@@ -141,4 +144,88 @@ def purchase_item(
     raise HTTPException(
         status_code=status_code,
         detail=data,
+    )
+
+def call_install_rpc(name: str, params: dict) -> dict:
+    try:
+        result = get_supabase().rpc(name, params).execute()
+    except APIError as error:
+        logger.exception("Companion installation failed: %s", name)
+        raise HTTPException(
+            status_code=503,
+            detail="Installation unavailable",
+        ) from error
+
+    data = result.data
+
+    if not isinstance(data, dict):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid installation response",
+        )
+
+    if data.get("ok") is True:
+        return data
+
+    reason = data.get("reason")
+
+    status_codes = {
+        "invalid_request": 422,
+        "invalid_slot": 422,
+        "user_not_found": 404,
+        "world_not_initialized": 409,
+        "request_conflict": 409,
+        "lamp_already_installed": 409,
+        "blanket_still_new": 409,
+        "item_not_owned": 409,
+    }
+
+    status_code = (
+        status_codes.get(reason, 503)
+        if isinstance(reason, str)
+        else 503
+    )
+
+    raise HTTPException(
+        status_code=status_code,
+        detail=data,
+    )
+
+
+@router.post("/blankets/install")
+def install_blanket(
+    body: BlanketInstallRequest,
+    current_user=Depends(get_current_user),
+):
+    return call_install_rpc(
+        "install_companion_blanket",
+        {
+            "p_user_id": current_user["user_id"],
+            "p_slot_number": body.slot_number,
+            "p_request_id": str(body.request_id),
+        },
+    )
+
+
+@router.post("/lamp/install")
+def install_lamp(
+    current_user=Depends(get_current_user),
+):
+    return call_install_rpc(
+        "install_companion_lamp",
+        {
+            "p_user_id": current_user["user_id"],
+        },
+    )
+
+
+@router.get("/thermal")
+def get_thermal_status(
+    current_user=Depends(get_current_user),
+):
+    return call_install_rpc(
+        "get_companion_thermal_status",
+        {
+            "p_user_id": current_user["user_id"],
+        },
     )
