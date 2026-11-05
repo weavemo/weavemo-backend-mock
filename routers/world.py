@@ -203,85 +203,51 @@ def get_companion_growth(
     supabase=Depends(get_supabase),
 ):
     try:
-        growth_result = (
-            supabase.table("companion_growth_state")
-            .select("egg_active_ms")
-            .eq("user_id", current_user["user_id"])
-            .limit(1)
-            .execute()
+        result = supabase.rpc(
+            "get_companion_growth_status",
+            {
+                "p_user_id": current_user["user_id"],
+            },
+        ).execute()
+
+        data = result.data
+
+        numeric_keys = (
+            "egg_active_ms",
+            "egg_effective_ms",
+            "required_active_ms",
+            "display_duration_ms",
+            "remaining_active_ms",
+            "remaining_display_ms",
         )
 
-        settings_result = (
-            supabase.table("companion_growth_settings")
-            .select("required_active_ms,display_duration_ms")
-            .eq("key", "default")
-            .limit(1)
-            .execute()
-        )
+        if not isinstance(data, dict):
+            raise ValueError("Invalid growth response")
+
+        if any(
+            type(data.get(key)) is not int
+            or data[key] < 0
+            for key in numeric_keys
+        ):
+            raise ValueError("Invalid growth values")
+
+        if (
+            data["required_active_ms"] <= 0
+            or data["display_duration_ms"] <= 0
+            or type(data.get("ready_to_hatch")) is not bool
+            or not isinstance(data.get("thermal"), dict)
+            or data["thermal"].get("ok") is not True
+        ):
+            raise ValueError("Invalid growth settings")
+
+        return data
+
     except Exception as error:
         logger.exception("Companion growth lookup failed")
-
         raise HTTPException(
             status_code=503,
             detail="Could not load companion growth",
         ) from error
-
-    growth_rows = growth_result.data
-    settings_rows = settings_result.data
-
-    if (
-        not isinstance(growth_rows, list)
-        or not isinstance(settings_rows, list)
-        or len(settings_rows) != 1
-        or not isinstance(settings_rows[0], dict)
-        or (
-            growth_rows
-            and not isinstance(growth_rows[0], dict)
-        )
-    ):
-        raise HTTPException(
-            status_code=503,
-            detail="Invalid companion growth response",
-        )
-
-    total_ms = (
-        growth_rows[0].get("egg_active_ms")
-        if growth_rows
-        else 0
-    )
-
-    settings = settings_rows[0]
-    required_ms = settings.get("required_active_ms")
-    display_ms = settings.get("display_duration_ms")
-
-    if (
-        type(total_ms) is not int
-        or total_ms < 0
-        or type(required_ms) is not int
-        or required_ms <= 0
-        or type(display_ms) is not int
-        or display_ms <= 0
-    ):
-        raise HTTPException(
-            status_code=503,
-            detail="Invalid companion growth settings",
-        )
-
-    remaining_active_ms = max(0, required_ms - total_ms)
-
-    # 정수 계산으로 남은 표시 시간을 올림 처리한다.
-    remaining_display_ms = (
-        display_ms * remaining_active_ms + required_ms - 1
-    ) // required_ms
-
-    return {
-        "egg_active_ms": total_ms,
-        "required_active_ms": required_ms,
-        "display_duration_ms": display_ms,
-        "remaining_active_ms": remaining_active_ms,
-        "remaining_display_ms": remaining_display_ms,
-        "ready_to_hatch": remaining_active_ms == 0,
-    }
 
 # 서버의 누적 시간 조건을 확인한 뒤 동물을 부화시킨다.
 @router.post("/companion/hatch")
