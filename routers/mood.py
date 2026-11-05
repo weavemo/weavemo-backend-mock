@@ -57,7 +57,7 @@ def submit_mood(
 
     try:
         result = supabase.rpc(
-            "save_mood_entry",
+            "save_mood_entry_with_reflection",
             {
                 "p_user_id": current_user["user_id"],
                 "p_main_valence": payload.mainValence,
@@ -67,9 +67,16 @@ def submit_mood(
                 "p_emotions": emotions,
                 "p_trigger_types": trigger_types,
                 "p_other_text": other_text,
+                "p_question_key": payload.reflectionQuestionKey,
+                "p_answer": payload.reflectionAnswer,
             },
         ).execute()
     except APIError as error:
+        if error.code == "P0001" and error.message in {
+            "invalid_reflection_question",
+            "invalid_reflection_answer",
+        }:
+            raise HTTPException(status_code=400, detail=error.message) from error
         if error.code == "P0001" and error.message == "invalid_mood_emotion":
             raise HTTPException(
                 status_code=400,
