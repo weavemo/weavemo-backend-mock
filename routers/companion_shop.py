@@ -19,6 +19,7 @@ class PurchaseRequest(BaseModel):
         pattern=r"^[a-z][a-z0-9_]*$",
     )
     request_id: UUID
+    quantity: int = Field(default=1, strict=True, ge=1, le=99)
 
 class BlanketInstallRequest(BaseModel):
     slot_number: int = Field(strict=True, ge=1, le=10)
@@ -95,10 +96,11 @@ def purchase_item(
         result = (
             get_supabase()
             .rpc(
-                "buy_companion_item",
+                "buy_companion_items",
                 {
                     "p_user_id": current_user["user_id"],
                     "p_item_key": body.item_key,
+                    "p_quantity": body.quantity,
                     "p_request_id": str(body.request_id),
                 },
             )
@@ -133,6 +135,7 @@ def purchase_item(
         "request_conflict": 409,
         "insufficient_tokens": 409,
         "already_owned": 409,
+        "quantity_limit": 422,
     }
 
     status_code = (
