@@ -25,7 +25,7 @@ def submit_mood(
     supabase=Depends(get_supabase),
     current_user=Depends(get_current_user),
 ):
-        if payload.emotions is None:
+    if payload.emotions is None:
             tag_codes = payload.tagIds or []
             emotions = [
                 {"code": code, "intensity": None}
@@ -46,7 +46,8 @@ def submit_mood(
     
         if other_text is not None and "other" not in trigger_types:
             raise HTTPException(status_code=400, detail="Select the other trigger first")
-    today = datetime.now(timezone.utc).date().isoformat()
+
+        today = datetime.now(timezone.utc).date().isoformat()
 
     try:
         result = supabase.rpc(
