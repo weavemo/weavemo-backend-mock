@@ -129,6 +129,7 @@ def purchase_item(
         "item_unavailable": 409,
         "request_conflict": 409,
         "insufficient_tokens": 409,
+        "already_owned": 409,
     }
 
     status_code = (
