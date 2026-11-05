@@ -33,6 +33,8 @@ class MoodInput(BaseModel):
     emotions: Optional[List[MoodEmotionInput]] = None
     triggerTypes: Optional[List[MoodTriggerCode]] = None
     triggerOtherText: Optional[str] = Field(default=None, max_length=200)
+    reflectionQuestionKey: Optional[str] = Field(default=None, max_length=64)
+    reflectionAnswer: Optional[str] = Field(default=None, max_length=200)
     note: Optional[str] = Field(
         default=None,
         max_length=200,
