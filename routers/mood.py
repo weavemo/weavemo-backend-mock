@@ -25,7 +25,27 @@ def submit_mood(
     supabase=Depends(get_supabase),
     current_user=Depends(get_current_user),
 ):
-    tag_codes = payload.tagIds or []
+        if payload.emotions is None:
+            tag_codes = payload.tagIds or []
+            emotions = [
+                {"code": code, "intensity": None}
+                for code in dict.fromkeys(tag_codes)
+            ]
+        else:
+            tag_codes = [emotion.code for emotion in payload.emotions]
+            if len(tag_codes) != len(set(tag_codes)):
+                raise HTTPException(status_code=400, detail="Duplicate emotion codes")
+    
+            emotions = [
+                {"code": emotion.code, "intensity": emotion.intensity}
+                for emotion in payload.emotions
+            ]
+    
+        trigger_types = list(dict.fromkeys(payload.triggerTypes or []))
+        other_text = (payload.triggerOtherText or "").strip() or None
+    
+        if other_text is not None and "other" not in trigger_types:
+            raise HTTPException(status_code=400, detail="Select the other trigger first")
     today = datetime.now(timezone.utc).date().isoformat()
 
     try:
@@ -37,12 +57,9 @@ def submit_mood(
                 "p_energy": payload.energy,
                 "p_note": payload.note,
                 "p_trigger_type": payload.triggerType,
-                "p_emotions": [
-                    {"code": code, "intensity": None}
-                    for code in dict.fromkeys(tag_codes)
-                ],
-                "p_trigger_types": [],
-                "p_other_text": None,
+                "p_emotions": emotions,
+                "p_trigger_types": trigger_types,
+                "p_other_text": other_text,
             },
         ).execute()
     except APIError as error:
