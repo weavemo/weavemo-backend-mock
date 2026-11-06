@@ -71,6 +71,13 @@ def _comment_to_dto(c: dict, current_user: dict) -> dict:
             "익명" if is_anon else c.get("_author_name", "user")
         ),
         "isAnonymous": is_anon,
+        "authorUserId": (
+            str(c["user_id"])
+            if not is_anon
+            and c.get("user_id") is not None
+            and c.get("content") != "[deleted]"
+            else None
+        ),
         "isMine": (c.get("user_id") == current_user["user_id"]),
     }
 
