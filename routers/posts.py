@@ -2,13 +2,17 @@
 
 
 from datetime import datetime, date
-from fastapi import APIRouter, Depends, HTTPException, Query
 from postgrest.exceptions import APIError
 from services.hidden_content import get_hidden_content_ids
 from dependencies.auth import get_current_user
 from dependencies.premium import require_premium
 from db.database import get_supabase
-from services.post_access import require_post_access, users_are_friends
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from services.post_access import (
+    require_post_access,
+    users_are_blocked,
+    users_are_friends,
+)
 
 router = APIRouter()
 
@@ -132,6 +136,35 @@ def _recalc_likes_count(supabase, post_id: int) -> int:
     supabase.table("posts").update({"likes_count": likes_count}).eq("id", post_id).execute()
     return likes_count
 
+
+@router.get("/people/{user_id}")
+def get_community_profile(
+    user_id: int = Path(..., ge=1, le=9223372036854775807),
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    viewer_id = int(current_user["user_id"])
+
+    if users_are_blocked(supabase, viewer_id, user_id):
+        raise HTTPException(status_code=404, detail="Author not available")
+
+    result = (
+        supabase.table("users")
+        .select("id, nickname, profile_image_url")
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Author not available")
+
+    author = result.data[0]
+    return {
+        "userId": str(author["id"]),
+        "nickname": author.get("nickname"),
+        "profileImageUrl": author.get("profile_image_url"),
+    }
 
 @router.get("")
 def list_posts(
