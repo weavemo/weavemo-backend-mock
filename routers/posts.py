@@ -101,6 +101,7 @@ def _post_to_dto(p: dict, current_user: dict, *, include_content: bool) -> dict:
             "익명" if is_anon else p.get("_author_name", "user")
         ),
         "isAnonymous": is_anon,
+        "authorUserId": str(p["user_id"]) if not is_anon and p.get("user_id") is not None else None,
         "isMine": is_mine,
         "commentCount": p.get("comments_count", 0),
         "likesCount": p.get("likes_count", 0),
