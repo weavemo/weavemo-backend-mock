@@ -30,36 +30,39 @@ def _attach_comment_author_names(supabase, rows: list[dict]) -> None:
     author_ids = {
         int(row["user_id"])
         for row in rows
-        if not row.get("is_anon")
-        and row.get("user_id") is not None
+        if not row.get("is_anon") and row.get("user_id") is not None
     }
 
-    names = {}
+    authors = {}
 
     if author_ids:
         result = (
             supabase.table("users")
-            .select("id, nickname")
+            .select("id, nickname, profile_image_url")
             .in_("id", sorted(author_ids))
             .execute()
         )
 
-        names = {
-            int(user["id"]): (
-                (user.get("nickname") or "").strip() or "user"
-            )
+        authors = {
+            int(user["id"]): user
             for user in (result.data or [])
         }
 
     for row in rows:
         if row.get("is_anon"):
             row["_author_name"] = "익명"
-        else:
-            row["_author_name"] = names.get(
-                int(row["user_id"]),
-                "user",
-            )
+            row["_author_avatar_url"] = None
+            continue
 
+        user_id = row.get("user_id")
+        author = authors.get(int(user_id), {}) if user_id is not None else {}
+        row["_author_name"] = (author.get("nickname") or "").strip() or "user"
+        row["_author_avatar_url"] = (
+            author.get("profile_image_url")
+            if row.get("content") != "[deleted]"
+            else None
+        )
+        
 def _comment_to_dto(c: dict, current_user: dict) -> dict:
     is_anon = bool(c.get("is_anon"))
     return {
