@@ -31,35 +31,29 @@ def _attach_author_names(supabase, rows: list[dict]) -> None:
     author_ids = {
         int(row["user_id"])
         for row in rows
-        if not row.get("is_anon")
-        and row.get("user_id") is not None
+        if not row.get("is_anon") and row.get("user_id") is not None
     }
 
-    names = {}
-
+    authors = {}
     if author_ids:
         result = (
             supabase.table("users")
-            .select("id, nickname")
+            .select("id, nickname, profile_image_url")
             .in_("id", sorted(author_ids))
             .execute()
         )
-
-        names = {
-            int(user["id"]): (
-                (user.get("nickname") or "").strip() or "user"
-            )
-            for user in (result.data or [])
-        }
+        authors = {int(user["id"]): user for user in result.data or []}
 
     for row in rows:
         if row.get("is_anon"):
             row["_author_name"] = "익명"
-        else:
-            row["_author_name"] = names.get(
-                int(row["user_id"]),
-                "user",
-            )
+            row["_author_avatar_url"] = None
+            continue
+
+        user_id = row.get("user_id")
+        author = authors.get(int(user_id), {}) if user_id is not None else {}
+        row["_author_name"] = (author.get("nickname") or "").strip() or "user"
+        row["_author_avatar_url"] = author.get("profile_image_url")
 
 # 조회 권한이 확인된 게시물들의 사진 유무를 한 번에 확인한다.
 def _attach_photo_flags(supabase, rows: list[dict]) -> None:
@@ -105,6 +99,7 @@ def _post_to_dto(p: dict, current_user: dict, *, include_content: bool) -> dict:
             "익명" if is_anon else p.get("_author_name", "user")
         ),
         "isAnonymous": is_anon,
+        "authorAvatarUrl": None if is_anon else p.get("_author_avatar_url"),
         "authorUserId": str(p["user_id"]) if not is_anon and p.get("user_id") is not None else None,
         "isMine": is_mine,
         "commentCount": p.get("comments_count", 0),
