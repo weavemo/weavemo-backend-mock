@@ -2,13 +2,13 @@
 
 
 from datetime import datetime, date
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from postgrest.exceptions import APIError
 from services.hidden_content import get_hidden_content_ids
 from dependencies.auth import get_current_user
 from dependencies.premium import require_premium
 from db.database import get_supabase
-from services.post_access import require_post_access
+from services.post_access import require_post_access, users_are_friends
 
 router = APIRouter()
 
@@ -140,6 +140,7 @@ def list_posts(
     feed: str = "public",
     limit: int = 20,
     cursor: str | None = None,
+    author_user_id: int | None = Query(default=None, ge=1, le=9223372036854775807),
     current_user=Depends(get_current_user),
     supabase=Depends(get_supabase),
 ):
@@ -200,6 +201,17 @@ def list_posts(
         for row in (incoming.data or [])
     )
 
+    author_visibilities = ["public"]
+
+    if author_user_id is not None:
+        if author_user_id in blocked_ids:
+            raise HTTPException(status_code=404, detail="Author not available")
+
+        if author_user_id == viewer_id:
+            author_visibilities.extend(["friends", "private"])
+        elif users_are_friends(supabase, viewer_id, author_user_id):
+            author_visibilities.append("friends")
+
     def make_cursor(row: dict) -> str:
         if sort == "latest":
             return f"{row['created_at']}|{row['id']}"
@@ -219,7 +231,13 @@ def list_posts(
         if category != "all":
             query = query.eq("category", category)
 
-        if feed == "mine":
+        if author_user_id is not None:
+            query = (
+                query.eq("user_id", author_user_id)
+                .eq("is_anon", False)
+                .in_("visibility", author_visibilities)
+            )
+        elif feed == "mine":
             query = (
                 query.eq("user_id", viewer_id)
                 .in_("visibility", ["public", "friends", "private"])
