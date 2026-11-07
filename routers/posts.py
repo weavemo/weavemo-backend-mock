@@ -372,7 +372,7 @@ def list_posts(
             [int(row["id"]) for row in batch],
         )
 
-         mark_timing("hidden")
+        mark_timing("hidden")
         
         for row in batch:
             if int(row["id"]) in hidden_ids:
