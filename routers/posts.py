@@ -206,29 +206,29 @@ def list_posts(
                 high_id if low_id == viewer_id else low_id
             )
 
-    outgoing = (
+    # 내가 차단한 사람과 나를 차단한 사람을 한 번에 조회한다.
+    block_result = (
         supabase.table("user_blocks")
-        .select("blocked_id")
-        .eq("blocker_id", viewer_id)
+        .select("blocker_id, blocked_id")
+        .or_(
+            f"blocker_id.eq.{viewer_id},"
+            f"blocked_id.eq.{viewer_id}"
+        )
         .execute()
     )
 
-    incoming = (
-        supabase.table("user_blocks")
-        .select("blocker_id")
-        .eq("blocked_id", viewer_id)
-        .execute()
-    )
+    blocked_ids: set[int] = set()
 
-    blocked_ids = {
-        int(row["blocked_id"])
-        for row in (outgoing.data or [])
-    }
-    blocked_ids.update(
-        int(row["blocker_id"])
-        for row in (incoming.data or [])
-    )
+    for block in block_result.data or []:
+        blocker_id = int(block["blocker_id"])
+        blocked_id = int(block["blocked_id"])
 
+        if blocker_id == viewer_id:
+            blocked_ids.add(blocked_id)
+
+        if blocked_id == viewer_id:
+            blocked_ids.add(blocker_id)
+            
     author_visibilities = ["public"]
 
     if author_user_id is not None:
