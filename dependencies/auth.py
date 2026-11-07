@@ -1,7 +1,7 @@
 # dependencies/auth.py
 
 import logging
-
+from time import perf_counter
 import httpx
 from fastapi import Depends, HTTPException, status
 from fastapi.security import (
@@ -76,7 +76,13 @@ def get_current_user(
         )
 
     try:
+        lookup_started = perf_counter()
         rows = fetch_user_rows(supabase, auth_uid)
+        print(
+            f"[auth timing] user_lookup="
+            f"{(perf_counter() - lookup_started) * 1000:.1f}ms",
+            flush=True,
+        )
     except Exception:
         logger.exception("Auth user lookup failed")
 
