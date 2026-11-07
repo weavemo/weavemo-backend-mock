@@ -1,6 +1,6 @@
 # weavemo-backend-mock/routers/posts.py
 
-
+from time import perf_counter
 from datetime import datetime, date
 from postgrest.exceptions import APIError
 from services.hidden_content import get_hidden_content_ids
@@ -184,6 +184,21 @@ def list_posts(
     if category != "all" and category not in ALLOWED_CATEGORIES:
         raise HTTPException(status_code=400, detail="Invalid category")
 
+    timing_started = perf_counter()
+    timing_previous = timing_started
+    timing_id = str(int(timing_started * 1_000_000))
+
+    def mark_timing(stage: str) -> None:
+        nonlocal timing_previous
+        now = perf_counter()
+        print(
+            f"[posts timing {timing_id}] feed={feed} "
+            f"{stage}={(now - timing_previous) * 1000:.1f}ms "
+            f"total={(now - timing_started) * 1000:.1f}ms",
+            flush=True,
+        )
+        timing_previous = now
+  
     viewer_id = int(current_user["user_id"])
     author_ids = {viewer_id}
 
@@ -206,6 +221,9 @@ def list_posts(
                 high_id if low_id == viewer_id else low_id
             )
 
+    
+    mark_timing("friendships")
+    
     # 내가 차단한 사람과 나를 차단한 사람을 한 번에 조회한다.
     block_result = (
         supabase.table("user_blocks")
@@ -228,7 +246,8 @@ def list_posts(
 
         if blocked_id == viewer_id:
             blocked_ids.add(blocker_id)
-            
+
+    mark_timing("blocks")
     author_visibilities = ["public"]
 
     if author_user_id is not None:
@@ -239,6 +258,8 @@ def list_posts(
             author_visibilities.extend(["friends", "private"])
         elif users_are_friends(supabase, viewer_id, author_user_id):
             author_visibilities.append("friends")
+
+    mark_timing("author_access")
 
     def make_cursor(row: dict) -> str:
         if sort == "latest":
@@ -331,8 +352,9 @@ def list_posts(
                 )
 
         result = query.limit(50).execute()
+        mark_timing("posts_batch")
         return result.data or []
-
+        
     rows: list[dict] = []
     scan_cursor = cursor
     next_cursor = None
@@ -350,6 +372,8 @@ def list_posts(
             [int(row["id"]) for row in batch],
         )
 
+         mark_timing("hidden")
+        
         for row in batch:
             if int(row["id"]) in hidden_ids:
                 continue
@@ -398,9 +422,12 @@ def list_posts(
     for row in rows:
         row["_is_liked"] = int(row["id"]) in liked_ids
 
+    mark_timing("likes")
     _attach_author_names(supabase, rows)
+    mark_timing("authors")
     _attach_photo_flags(supabase, rows)
-
+    mark_timing("photos")
+    
     return {
         "items": [
             _post_to_dto(
