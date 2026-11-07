@@ -168,7 +168,11 @@ def list_posts(
     feed: str = "public",
     limit: int = 20,
     cursor: str | None = None,
-    author_user_id: int | None = Query(default=None, ge=1, le=9223372036854775807),
+    author_user_id: int | None = Query(
+        default=None,
+        ge=1,
+        le=9223372036854775807,
+    ),
     current_user=Depends(get_current_user),
     supabase=Depends(get_supabase),
 ):
@@ -184,259 +188,92 @@ def list_posts(
     if category != "all" and category not in ALLOWED_CATEGORIES:
         raise HTTPException(status_code=400, detail="Invalid category")
 
-    timing_started = perf_counter()
-    timing_previous = timing_started
-    timing_id = str(int(timing_started * 1_000_000))
+    started = perf_counter()
 
-    def mark_timing(stage: str) -> None:
-        nonlocal timing_previous
-        now = perf_counter()
-        print(
-            f"[posts timing {timing_id}] feed={feed} "
-            f"{stage}={(now - timing_previous) * 1000:.1f}ms "
-            f"total={(now - timing_started) * 1000:.1f}ms",
-            flush=True,
-        )
-        timing_previous = now
-  
-    viewer_id = int(current_user["user_id"])
-    author_ids = {viewer_id}
-
-    if feed == "friends":
-        relationships = (
-            supabase.table("friendships")
-            .select("user_low_id, user_high_id")
-            .eq("status", "accepted")
-            .or_(
-                f"user_low_id.eq.{viewer_id},"
-                f"user_high_id.eq.{viewer_id}"
-            )
-            .execute()
-        )
-
-        for relationship in relationships.data or []:
-            low_id = int(relationship["user_low_id"])
-            high_id = int(relationship["user_high_id"])
-            author_ids.add(
-                high_id if low_id == viewer_id else low_id
-            )
-
-    
-    mark_timing("friendships")
-    
-    # 내가 차단한 사람과 나를 차단한 사람을 한 번에 조회한다.
-    block_result = (
-        supabase.table("user_blocks")
-        .select("blocker_id, blocked_id")
-        .or_(
-            f"blocker_id.eq.{viewer_id},"
-            f"blocked_id.eq.{viewer_id}"
-        )
-        .execute()
-    )
-
-    blocked_ids: set[int] = set()
-
-    for block in block_result.data or []:
-        blocker_id = int(block["blocker_id"])
-        blocked_id = int(block["blocked_id"])
-
-        if blocker_id == viewer_id:
-            blocked_ids.add(blocked_id)
-
-        if blocked_id == viewer_id:
-            blocked_ids.add(blocker_id)
-
-    mark_timing("blocks")
-    author_visibilities = ["public"]
-
-    if author_user_id is not None:
-        if author_user_id in blocked_ids:
-            raise HTTPException(status_code=404, detail="Author not available")
-
-        if author_user_id == viewer_id:
-            author_visibilities.extend(["friends", "private"])
-        elif users_are_friends(supabase, viewer_id, author_user_id):
-            author_visibilities.append("friends")
-
-    mark_timing("author_access")
-
-    def make_cursor(row: dict) -> str:
-        if sort == "latest":
-            return f"{row['created_at']}|{row['id']}"
-
-        return (
-            f"{row['comments_count']}|"
-            f"{row['created_at']}|{row['id']}"
-        )
-
-    def fetch_batch(after: str | None) -> list[dict]:
-        # 매번 새 쿼리를 만들어 이전 커서 조건이 누적되지 않게 한다.
-        query = supabase.table("posts").select(
-            "id, user_id, category, title, content, created_at, "
-            "is_anon, comments_count, likes_count, view_count, visibility"
-        )
-
-        if category != "all":
-            query = query.eq("category", category)
-
-        if author_user_id is not None:
-            query = (
-                query.eq("user_id", author_user_id)
-                .eq("is_anon", False)
-                .in_("visibility", author_visibilities)
-            )
-        elif feed == "mine":
-            query = (
-                query.eq("user_id", viewer_id)
-                .in_("visibility", ["public", "friends", "private"])
-            )
-        elif feed == "friends":
-            query = (
-                query.in_("user_id", sorted(author_ids))
-                .in_("visibility", ["public", "friends"])
-            )
-        else:
-            query = query.eq("visibility", "public")
-
-        if blocked_ids:
-            query = query.not_.in_("user_id", sorted(blocked_ids))
-
-        if sort == "popular":
-            query = query.order("comments_count", desc=True)
-
-        query = (
-            query.order("created_at", desc=True)
-            .order("id", desc=True)
-        )
-
-        if after:
-            try:
-                parts = after.split("|")
-
-                if sort == "latest":
-                    timestamp, raw_id = parts
-                    comment_count = None
-                else:
-                    raw_count, timestamp, raw_id = parts
-                    comment_count = int(raw_count)
-
-                    if comment_count < 0:
-                        raise ValueError
-
-                # 날짜와 번호를 검증·정규화한 값만 필터에 사용한다.
-                timestamp = datetime.fromisoformat(timestamp).isoformat()
-                row_id = int(raw_id)
-
-                if not 0 < row_id <= 9223372036854775807:
-                    raise ValueError
-
-            except (ValueError, TypeError, OverflowError):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid cursor",
-                ) from None
-
-            if sort == "latest":
-                query = query.or_(
-                    f"created_at.lt.{timestamp},"
-                    f"and(created_at.eq.{timestamp},id.lt.{row_id})"
-                )
-            else:
-                query = query.or_(
-                    f"comments_count.lt.{comment_count},"
-                    f"and(comments_count.eq.{comment_count},"
-                    f"created_at.lt.{timestamp}),"
-                    f"and(comments_count.eq.{comment_count},"
-                    f"created_at.eq.{timestamp},id.lt.{row_id})"
-                )
-
-        result = query.limit(50).execute()
-        mark_timing("posts_batch")
-        return result.data or []
-        
-    rows: list[dict] = []
-    scan_cursor = cursor
-    next_cursor = None
-
-    while len(rows) < limit:
-        batch = fetch_batch(scan_cursor)
-
-        if not batch:
-            break
-
-        hidden_ids = get_hidden_content_ids(
-            supabase,
-            viewer_id,
-            "post",
-            [int(row["id"]) for row in batch],
-        )
-
-        mark_timing("hidden")
-        
-        for row in batch:
-            if int(row["id"]) in hidden_ids:
-                continue
-
-            rows.append(row)
-
-            if len(rows) == limit:
-                # 아직 반환하지 않은 글은 다음 요청에서 다시 조회한다.
-                next_cursor = make_cursor(row)
-                break
-
-        if len(rows) == limit:
-            break
-
-        if len(batch) < 50:
-            break
-
-        # 한 묶음이 모두 숨김이어도 다음 묶음으로 진행한다.
-        following_cursor = make_cursor(batch[-1])
-
-        if following_cursor == scan_cursor:
-            raise HTTPException(
-                status_code=503,
-                detail="Post pagination did not advance",
-            )
-
-        scan_cursor = following_cursor
-
-    post_ids = [int(row["id"]) for row in rows]
-    liked_ids: set[int] = set()
-
-    if post_ids:
-        result = (
-            supabase.table("post_likes")
-            .select("post_id")
-            .eq("user_id", viewer_id)
-            .in_("post_id", post_ids)
-            .execute()
-        )
-
-        liked_ids = {
-            int(row["post_id"])
-            for row in (result.data or [])
+    try:
+        result = supabase.rpc(
+            "get_community_feed_page",
+            {
+                "p_user_id": int(current_user["user_id"]),
+                "p_feed": feed,
+                "p_category": category,
+                "p_sort": sort,
+                "p_limit": limit,
+                "p_cursor": cursor,
+                "p_author_user_id": author_user_id,
+            },
+        ).execute()
+    except APIError as error:
+        known_errors = {
+            "invalid_feed_request": (400, "Invalid feed request"),
+            "invalid_cursor": (400, "Invalid cursor"),
+            "author_not_available": (404, "Author not available"),
         }
 
-    for row in rows:
-        row["_is_liked"] = int(row["id"]) in liked_ids
+        mapped = (
+            known_errors.get(error.message)
+            if error.code == "P0001"
+            else None
+        )
 
-    mark_timing("likes")
-    _attach_author_names(supabase, rows)
-    mark_timing("authors")
-    _attach_photo_flags(supabase, rows)
-    mark_timing("photos")
-    
-    return {
-        "items": [
-            _post_to_dto(
-                row,
-                current_user,
-                include_content=False,
-            )
+        if mapped:
+            status_code, detail = mapped
+            raise HTTPException(
+                status_code=status_code,
+                detail=detail,
+            ) from error
+
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load community feed",
+        ) from error
+
+    data = result.data
+
+    if not isinstance(data, dict):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid community feed response",
+        )
+
+    rows = data.get("items")
+    next_cursor = data.get("nextCursor")
+
+    if (
+        not isinstance(rows, list)
+        or any(
+            not isinstance(row, dict)
+            or row.get("id") is None
+            or row.get("user_id") is None
             for row in rows
-        ],
+        )
+        or (
+            next_cursor is not None
+            and not isinstance(next_cursor, str)
+        )
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Invalid community feed response",
+        )
+
+    items = [
+        _post_to_dto(
+            row,
+            current_user,
+            include_content=False,
+        )
+        for row in rows
+    ]
+
+    print(
+        f"[posts timing] feed={feed} "
+        f"rpc_and_format={(perf_counter() - started) * 1000:.1f}ms",
+        flush=True,
+    )
+
+    return {
+        "items": items,
         "nextCursor": next_cursor,
     }
 
