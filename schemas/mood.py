@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import List, Optional, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 MoodTriggerCode = Literal[
@@ -257,3 +257,26 @@ class MoodAnalysisResponse(BaseModel):
     feedbackContext: Optional[
         MoodAnalysisFeedbackContext
     ] = None
+
+# 분석 적합도 피드백
+
+AnalysisFeedbackRating = Literal[
+    "fits",
+    "partly_fits",
+    "not_sure",
+]
+
+
+class AnalysisFeedbackLookup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=1, max_length=4096)
+
+
+class AnalysisFeedbackInput(AnalysisFeedbackLookup):
+    rating: AnalysisFeedbackRating
+
+
+class AnalysisFeedbackResponse(BaseModel):
+    reportKey: str
+    rating: Optional[AnalysisFeedbackRating] = None
