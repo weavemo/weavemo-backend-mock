@@ -3,8 +3,10 @@
 
 
 from __future__ import annotations
-from services.analysis_feedback import build_feedback_context
-
+from services.analysis_feedback import (
+    build_feedback_context,
+    verify_feedback_token,
+)
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from fastapi.encoders import jsonable_encoder
@@ -13,7 +15,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Header, status
 from postgrest.exceptions import APIError
 from db.database import get_supabase
 from dependencies.auth import get_current_user
-from schemas.mood import MoodInput, MoodResult, MoodAnalysisResponse
+from schemas.mood import (
+    MoodInput,
+    MoodResult,
+    MoodAnalysisResponse,
+    AnalysisFeedbackLookup,
+    AnalysisFeedbackInput,
+    AnalysisFeedbackResponse,
+)
 from services.mood_service import get_mood_analysis
 
 router = APIRouter()
@@ -269,3 +278,103 @@ def get_unique_mood_count(
         "count": len(unique_tags),
         "tags": unique_tags,
     }
+
+# 분석 적합도 피드백 조회·저장
+
+def _feedback_claims(token: str, current_user: dict) -> dict:
+    claims = verify_feedback_token(
+        token,
+        int(current_user["user_id"]),
+    )
+
+    # 발급 후 구독 상태가 바뀐 경우도 현재 권한을 적용한다.
+    if (
+        claims["analysis_range"] == "30d"
+        and current_user.get("plan") != "premium"
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "SUBSCRIPTION_REQUIRED",
+                "feature": "monthly_analysis",
+            },
+        )
+
+    return claims
+
+
+@router.post(
+    "/analysis/feedback/lookup",
+    response_model=AnalysisFeedbackResponse,
+)
+def lookup_analysis_feedback(
+    body: AnalysisFeedbackLookup,
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    claims = _feedback_claims(body.token, current_user)
+
+    try:
+        result = (
+            supabase.table("mood_analysis_feedback")
+            .select("rating")
+            .eq("user_id", int(current_user["user_id"]))
+            .eq("report_key", claims["report_key"])
+            .limit(1)
+            .execute()
+        )
+    except Exception as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load analysis feedback",
+        ) from error
+
+    return AnalysisFeedbackResponse(
+        reportKey=claims["report_key"],
+        rating=result.data[0]["rating"] if result.data else None,
+    )
+
+
+@router.put(
+    "/analysis/feedback",
+    response_model=AnalysisFeedbackResponse,
+)
+def save_analysis_feedback(
+    body: AnalysisFeedbackInput,
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    claims = _feedback_claims(body.token, current_user)
+
+    try:
+        result = (
+            supabase.table("mood_analysis_feedback")
+            .upsert(
+                {
+                    "user_id": int(current_user["user_id"]),
+                    "report_key": claims["report_key"],
+                    "analysis_range": claims["analysis_range"],
+                    "analysis_version": claims["analysis_version"],
+                    "rating": body.rating,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                on_conflict="user_id,report_key",
+            )
+            .execute()
+        )
+    except Exception as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Could not save analysis feedback",
+        ) from error
+
+    if not result.data:
+        raise HTTPException(
+            status_code=503,
+            detail="Analysis feedback save returned no result",
+        )
+
+    return AnalysisFeedbackResponse(
+        reportKey=claims["report_key"],
+        rating=result.data[0]["rating"],
+    )
