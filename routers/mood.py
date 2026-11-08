@@ -1,5 +1,7 @@
 # weavemo-backend-mock/routers/mood.py
 
+
+from services.analysis_feedback import build_feedback_context
 from __future__ import annotations
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
@@ -105,7 +107,12 @@ def submit_mood(
 )
 def get_analysis(
     range: str = Query("today", regex="^(today|7d|30d)$"),
-    tz_offset_min: int = Header(0, convert_underscores=False),
+    tz_offset_min: int = Header(
+        0,
+        convert_underscores=False,
+        ge=-840,
+        le=840,
+    ),
     supabase=Depends(get_supabase),
     current_user=Depends(get_current_user),
 ):
@@ -138,27 +145,29 @@ def get_analysis(
             include_period_insights=is_premium,
         )
 
+        validated = MoodAnalysisResponse.model_validate(result)
+
+        content = jsonable_encoder(
+            validated,
+            by_alias=True,
+            exclude={"feedbackContext"},
+        )
+
         if range_key == "7d" and not is_premium:
-            # 기존 응답 모델로 검증한 후 구독용 필드를 제외한다.
-            validated = MoodAnalysisResponse.model_validate(result)
-
-            content = jsonable_encoder(
-                validated,
-                by_alias=True,
-                exclude={
-                    "periodInsights",
-                    "period_insights",
-                },
-            )
-
-            # 응답 모델의 기본값으로 제외한 필드가 다시 붙지 않도록 한다.
             content.pop("periodInsights", None)
             content.pop("period_insights", None)
 
-            return JSONResponse(content=content)
+        # 실제로 반환하는 분석 내용만 식별한다.
+        content["feedbackContext"] = build_feedback_context(
+            user_id=user_id,
+            range_key=range_key,
+            tz_offset_min=tz_offset_min,
+            content=content,
+        )
 
-        return result
-
+        # 무료 7일 응답에서 제외한 필드가 기본값으로 붙지 않게 한다.
+        return JSONResponse(content=content)
+        
     except HTTPException:
         raise
 
