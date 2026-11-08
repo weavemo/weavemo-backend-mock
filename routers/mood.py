@@ -1,8 +1,10 @@
 # weavemo-backend-mock/routers/mood.py
 
 
-from services.analysis_feedback import build_feedback_context
+
 from __future__ import annotations
+from services.analysis_feedback import build_feedback_context
+
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from fastapi.encoders import jsonable_encoder
