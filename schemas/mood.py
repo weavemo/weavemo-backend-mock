@@ -216,6 +216,11 @@ class MoodPeriodInsights(BaseModel):
     )
 
 
+class MoodAnalysisFeedbackContext(BaseModel):
+    reportKey: str
+    analysisVersion: int
+    token: str
+
 # -------------------------
 # Analysis response
 # -------------------------
@@ -247,4 +252,8 @@ class MoodAnalysisResponse(BaseModel):
 
     periodInsights: Optional[
         MoodPeriodInsights
+    ] = None
+
+    feedbackContext: Optional[
+        MoodAnalysisFeedbackContext
     ] = None
