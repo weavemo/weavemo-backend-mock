@@ -31,60 +31,29 @@ def get_shop_items(
 ):
     supabase = get_supabase()
     user_id = current_user["user_id"]
-
     try:
-        items = (
-            supabase.table("companion_shop_items")
-            .select(
-                "key, name_ko, name_en, "
-                "care_action, token_price, sort_order"
-            )
-            .eq("is_enabled", True)
-            .order("sort_order")
-            .order("key")
-            .execute()
-            .data
-        ) or []
-
-        inventory = (
-            supabase.table("user_companion_inventory")
-            .select("item_key, quantity")
-            .eq("user_id", user_id)
-            .execute()
-            .data
-        ) or []
-
-        wallets = (
-            supabase.table("user_point_wallets")
-            .select("balance")
-            .eq("user_id", user_id)
-            .limit(1)
-            .execute()
-            .data
-        ) or []
-
-    except APIError as error:
+        items = supabase.table("companion_shop_items").select(
+            "key, name_ko, name_en, care_action, token_price, sort_order"
+        ).eq("is_enabled", True).order("sort_order").order("key").execute().data or []
+        inventory = supabase.table("user_companion_inventory").select(
+            "item_key, quantity"
+        ).eq("user_id", user_id).execute().data or []
+        wallets = supabase.table("user_token_wallets").select(
+            "balance"
+        ).eq("user_id", user_id).limit(1).execute().data or []
+        balance = wallets[0]["balance"] if wallets else 0
+        if type(balance) is not int or not 0 <= balance <= 9007199254740991:
+            raise ValueError("Invalid token balance")
+        owned = {row["item_key"]: row["quantity"] for row in inventory}
+        return {
+            "token_balance": balance,
+            "point_balance": balance,
+            "items": [{**item, "owned_quantity": owned.get(item["key"], 0)} for item in items],
+        }
+    except Exception as error:
         logger.exception("Companion shop load failed")
-        raise HTTPException(
-            status_code=503,
-            detail="Shop unavailable",
-        ) from error
+        raise HTTPException(status_code=503, detail="Shop unavailable") from error
 
-    owned = {
-        row["item_key"]: row["quantity"]
-        for row in inventory
-    }
-
-    return {
-        "point_balance": wallets[0]["balance"] if wallets else 0,
-        "items": [
-            {
-                **item,
-                "owned_quantity": owned.get(item["key"], 0),
-            }
-            for item in items
-        ],
-    }
 
 
 @router.post("/purchase")
