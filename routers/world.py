@@ -1,11 +1,9 @@
-# routers/world.py
-
 import logging
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 
 from db.database import get_supabase
 from dependencies.auth import get_current_user
@@ -23,8 +21,6 @@ def initialize_world(
     user_id = current_user["user_id"]
 
     try:
-        # 요청 본문에서 사용자 ID를 받지 않는다.
-        # 기존 World와 동물이 있으면 현재 상태를 반환한다.
         result = supabase.rpc(
             "initialize_my_world",
             {
@@ -74,7 +70,6 @@ def initialize_world(
 
     return data
 
-# 알 돌보기를 현지 날짜별로 한 번 기록한다.
 @router.post("/companion/warm")
 def warm_companion(
     tz_offset_min: int = Body(
@@ -88,7 +83,6 @@ def warm_companion(
     supabase=Depends(get_supabase),
 ):
     try:
-        # 인증된 본인의 알만 돌볼 수 있다.
         result = supabase.rpc(
             "warm_my_companion",
             {
@@ -123,8 +117,7 @@ def warm_companion(
 
     validate_care_reward(data)
     return data
-    
-# 성장 시간 신호의 요청 형식을 정의한다.
+
 class CompanionGrowthHeartbeatRequest(BaseModel):
     connection_id: UUID
     tz_offset_min: int = Field(
@@ -143,7 +136,6 @@ def companion_growth_heartbeat(
     supabase=Depends(get_supabase),
 ):
     try:
-        # 사용자 ID와 누적 시간은 클라이언트에서 받지 않는다.
         result = supabase.rpc(
             "heartbeat_companion_growth",
             {
@@ -196,7 +188,6 @@ def companion_growth_heartbeat(
 
     return data
 
-# 저장된 성장 시간과 서버 설정으로 남은 부화 시간을 계산한다.
 @router.get("/companion/growth")
 def get_companion_growth(
     current_user=Depends(get_current_user),
@@ -249,7 +240,6 @@ def get_companion_growth(
             detail="Could not load companion growth",
         ) from error
 
-# 서버의 누적 시간 조건을 확인한 뒤 동물을 부화시킨다.
 @router.post("/companion/hatch")
 def hatch_companion(
     current_user=Depends(get_current_user),
@@ -280,7 +270,6 @@ def hatch_companion(
             detail="Invalid companion hatch response",
         )
 
-    # 시간 미충족은 정상적인 처리 결과로 반환한다.
     if data.get("ok") is False:
         remaining_ms = data.get("remaining_active_ms")
 
@@ -315,8 +304,6 @@ def hatch_companion(
 
     return data
 
-# 부화 후 사용할 돌봄 종류.
-# 부화 후 돌봄 활동과 공통 기록의 연결.
 CARE_SOURCES = {
     "feed": "companion_feed",
     "water": "companion_water",
@@ -401,7 +388,6 @@ def get_companion_care(
     current_user=Depends(get_current_user),
     supabase=Depends(get_supabase),
 ):
-     # 브라우저와 같은 오프셋으로 오늘의 조회 범위를 계산한다.。
     offset = timedelta(minutes=tz_offset_min)
     today = (datetime.now(timezone.utc) + offset).date()
     start = datetime.combine(
@@ -447,7 +433,6 @@ def get_companion_care(
         ],
     }
 
-# 돌봄 응답에 포함된 공통 포인트 결과를 검증한다.
 def validate_care_reward(data: dict) -> None:
     gained = data.get("points_gained")
     balance = data.get("point_balance")
@@ -480,7 +465,6 @@ def validate_care_reward(data: dict) -> None:
             detail="Invalid care reward response",
         )
 
-# 홈에서 돌봄 미완료 여부와 공통 포인트를 조회한다.
 @router.get("/summary")
 def get_world_summary(
     tz_offset_min: int = Query(..., ge=-840, le=840),
@@ -538,7 +522,6 @@ def get_world_summary(
         else:
             required = set()
 
-        # World가 없으면 첫 방문을 안내한다.
         pending = stage is None
 
         if required:
@@ -573,3 +556,47 @@ def get_world_summary(
         "has_pending_care": pending,
         "point_balance": balance,
     }
+
+
+@router.post("/friends/{target_user_id}/warm")
+def help_friend_egg(
+    target_user_id: int = Path(..., ge=1, le=9223372036854775807),
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    try:
+        result = supabase.rpc(
+            "help_friend_companion",
+            {
+                "p_actor": int(current_user["user_id"]),
+                "p_target": target_user_id,
+            },
+        ).execute()
+    except Exception as error:
+        logger.exception("Friend companion help failed")
+        raise HTTPException(
+            status_code=503,
+            detail={"reason": "help_unavailable"},
+        ) from error
+
+    data = result.data
+    if not isinstance(data, dict) or type(data.get("ok")) is not bool:
+        raise HTTPException(status_code=503, detail={"reason": "invalid_response"})
+
+    if data["ok"]:
+        if type(data.get("already_helped")) is not bool:
+            raise HTTPException(status_code=503, detail={"reason": "invalid_response"})
+        return {"ok": True, "already_helped": data["already_helped"]}
+
+    reason = data.get("reason")
+    statuses = {
+        "invalid_request": 400,
+        "self_not_allowed": 400,
+        "unavailable": 404,
+        "care_not_started": 409,
+        "ready_to_hatch": 409,
+        "warmth_full": 409,
+    }
+    if not isinstance(reason, str) or reason not in statuses:
+        raise HTTPException(status_code=503, detail={"reason": "invalid_response"})
+    raise HTTPException(status_code=statuses[reason], detail={"reason": reason})
