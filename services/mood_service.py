@@ -5,8 +5,10 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Dict, Any
 
-from services.mood_detail_service import build_mood_details
-
+from services.mood_detail_service import (
+    build_mood_details,
+    build_personal_baseline,
+)
 from schemas.mood import (
     MoodAnalysisResponse,
     MoodAnalysisSummary,
@@ -896,6 +898,68 @@ def get_mood_analysis(
         trigger_rows=trigger_res.data or [],
         range_key=range_key,
     )
+
+    # 오늘 분석과 기존에 허용된 기간 분석에 개인 기준선을 연결한다.
+    if (
+        detailed_insights is not None
+        and (
+            range_key == "today"
+            or include_period_insights
+        )
+    ):
+        baseline_start_utc = (
+            start_utc - timedelta(days=14)
+        )
+
+        try:
+            baseline_moods = []
+            batch_size = 500
+            offset = 0
+
+            # 서버의 기본 반환 건수 제한으로 기록이 누락되지 않도록 나누어 조회한다.
+            while True:
+                baseline_res = (
+                    supabase.table("moods")
+                    .select(
+                        "id, recorded_at, main_valence, energy"
+                    )
+                    .eq("user_id", user_id)
+                    .gte(
+                        "recorded_at",
+                        baseline_start_utc.isoformat(),
+                    )
+                    .lt(
+                        "recorded_at",
+                        start_utc.isoformat(),
+                    )
+                    .order("recorded_at", desc=False)
+                    .order("id", desc=False)
+                    .range(
+                        offset,
+                        offset + batch_size - 1,
+                    )
+                    .execute()
+                )
+
+                batch = baseline_res.data or []
+                baseline_moods.extend(batch)
+
+                if len(batch) < batch_size:
+                    break
+
+                offset += batch_size
+
+            detailed_insights.baseline = (
+                build_personal_baseline(
+                    current_moods=moods,
+                    baseline_moods=baseline_moods,
+                    tz_offset_min=tz_offset_min,
+                )
+            )
+        except Exception:
+            # 기준선 조회 실패가 현재 기록의 분석까지 막지 않도록 한다.
+            # 기존 기본값인 unavailable을 유지한다.
+            pass    
 
     # 기존 화면에서 사용하는 감정 태그별 횟수 집계를 유지한다.
     tag_counts: Dict[str, int] = {}
