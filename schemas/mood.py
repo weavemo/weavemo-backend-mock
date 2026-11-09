@@ -216,6 +216,120 @@ class MoodPeriodInsights(BaseModel):
     )
 
 
+# 감정 구성과 강도
+class MoodEmotionDetail(BaseModel):
+    code: str
+    count: int
+    intensity_count: int
+    average_intensity: Optional[float] = None
+
+
+# 같은 기록에서 함께 선택한 감정
+class MoodEmotionPair(BaseModel):
+    codes: List[str]
+    count: int
+
+
+# 선택한 영향 요인과 함께 기록된 상태
+class MoodTriggerDetail(BaseModel):
+    code: str
+    count: int
+    avg_valence: float
+    avg_energy: float
+
+
+# 현재 분석 범위의 기록 상태
+class MoodObservation(BaseModel):
+    checkin_count: int
+    active_days: int
+
+    avg_valence: float
+    avg_energy: float
+
+    positive_count: int
+    neutral_count: int
+    negative_count: int
+
+    latest_valence: int
+    latest_energy: int
+
+
+# 오늘 첫 기록과 마지막 기록 사이의 변화
+class MoodWithinDayChange(BaseModel):
+    available: bool = False
+    checkin_count: int = 0
+
+    first_recorded_at: Optional[str] = None
+    last_recorded_at: Optional[str] = None
+
+    valence_delta: Optional[int] = None
+    energy_delta: Optional[int] = None
+
+
+# 분석 시작일 직전 14일의 개인 기준선
+class MoodPersonalBaseline(BaseModel):
+    status: Literal[
+        "available",
+        "insufficient",
+        "unavailable",
+    ] = "insufficient"
+
+    window_days: int = 14
+    checkin_count: int = 0
+    active_days: int = 0
+
+    avg_valence: Optional[float] = None
+    avg_energy: Optional[float] = None
+
+    valence_delta: Optional[float] = None
+    energy_delta: Optional[float] = None
+
+
+# 문장을 생성할 때 사용할 관찰 코드와 근거
+class MoodEvidenceInsight(BaseModel):
+    code: str
+
+    evidence_count: int
+    evidence_days: int
+
+    emotion_codes: List[str] = Field(
+        default_factory=list
+    )
+    trigger_codes: List[str] = Field(
+        default_factory=list
+    )
+
+
+# 상세 분석 결과
+class MoodDetailedInsights(BaseModel):
+    version: int = 1
+
+    observation: MoodObservation
+
+    emotions: List[MoodEmotionDetail] = Field(
+        default_factory=list
+    )
+
+    emotion_pairs: List[MoodEmotionPair] = Field(
+        default_factory=list
+    )
+
+    triggers: List[MoodTriggerDetail] = Field(
+        default_factory=list
+    )
+
+    within_day_change: MoodWithinDayChange = Field(
+        default_factory=MoodWithinDayChange
+    )
+
+    baseline: MoodPersonalBaseline = Field(
+        default_factory=MoodPersonalBaseline
+    )
+
+    insights: List[MoodEvidenceInsight] = Field(
+        default_factory=list
+    )
+
 class MoodAnalysisFeedbackContext(BaseModel):
     reportKey: str
     analysisVersion: int
@@ -254,10 +368,13 @@ class MoodAnalysisResponse(BaseModel):
         MoodPeriodInsights
     ] = None
 
+    detailedInsights: Optional[
+        MoodDetailedInsights
+    ] = None
+
     feedbackContext: Optional[
         MoodAnalysisFeedbackContext
     ] = None
-
 # 분석 적합도 피드백
 
 AnalysisFeedbackRating = Literal[
