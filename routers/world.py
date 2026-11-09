@@ -7,10 +7,12 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 
 from db.database import get_supabase
 from dependencies.auth import get_current_user
+from routers.token_exchange import router as token_exchange_router
 
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+router.include_router(token_exchange_router, prefix="/tokens")
 
 
 @router.post("/initialize")
