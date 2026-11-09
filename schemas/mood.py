@@ -375,12 +375,12 @@ class MoodAnalysisResponse(BaseModel):
     feedbackContext: Optional[
         MoodAnalysisFeedbackContext
     ] = None
-# 분석 적합도 피드백
 
+# 분석이 감정 이해에 도움이 되었는지 평가한다.
 AnalysisFeedbackRating = Literal[
-    "fits",
-    "partly_fits",
-    "not_sure",
+    "helpful",
+    "partly_helpful",
+    "not_helpful",
 ]
 
 
