@@ -1,8 +1,8 @@
 # services/mood_detail_service.py
 
 from collections import Counter, defaultdict
+from datetime import datetime, timedelta, timezone
 from itertools import combinations
-
 from schemas.mood import (
     MoodDetailedInsights,
     MoodEmotionDetail,
@@ -254,4 +254,117 @@ def build_mood_details(
         # 개인 기준선 조회는 다음 단계에서 연결한다.
         baseline=MoodPersonalBaseline(status="unavailable"),
         insights=insights,
+    )
+
+def _local_daily_averages(moods, tz_offset_min):
+    grouped = defaultdict(list)
+
+    for mood in moods:
+        recorded_at = mood.get("recorded_at")
+
+        if not recorded_at:
+            continue
+
+        try:
+            timestamp = datetime.fromisoformat(
+                str(recorded_at).replace("Z", "+00:00")
+            )
+
+            # 시간대 정보가 없는 저장 시각은 UTC로 해석한다.
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(
+                    tzinfo=timezone.utc
+                )
+
+            local_timestamp = (
+                timestamp.astimezone(timezone.utc)
+                + timedelta(minutes=tz_offset_min)
+            )
+            date_key = local_timestamp.date().isoformat()
+        except (ValueError, TypeError):
+            continue
+
+        grouped[date_key].append(mood)
+
+    return [
+        {
+            "date": date_key,
+            "valence": sum(
+                mood["main_valence"]
+                for mood in selected
+            ) / len(selected),
+            "energy": sum(
+                mood["energy"]
+                for mood in selected
+            ) / len(selected),
+            "count": len(selected),
+        }
+        for date_key, selected in sorted(grouped.items())
+    ]
+
+
+def build_personal_baseline(
+    *,
+    current_moods,
+    baseline_moods,
+    tz_offset_min,
+):
+    baseline_days = _local_daily_averages(
+        baseline_moods,
+        tz_offset_min,
+    )
+    current_days = _local_daily_averages(
+        current_moods,
+        tz_offset_min,
+    )
+
+    checkin_count = sum(
+        item["count"]
+        for item in baseline_days
+    )
+    active_days = len(baseline_days)
+
+      # 초기 제품 기준으로 비교에는 최소 5일의 기록을 사용한다.
+    if active_days < 5 or not current_days:
+        return MoodPersonalBaseline(
+            status="insufficient",
+            window_days=14,
+            checkin_count=checkin_count,
+            active_days=active_days,
+        )
+
+    # 반올림 전 값으로 차이를 계산하고, 응답 값만 소수 둘째 자리로 반올림한다.
+    baseline_valence = (
+        sum(item["valence"] for item in baseline_days)
+        / active_days
+    )
+    baseline_energy = (
+        sum(item["energy"] for item in baseline_days)
+        / active_days
+    )
+
+    current_valence = (
+        sum(item["valence"] for item in current_days)
+        / len(current_days)
+    )
+    current_energy = (
+        sum(item["energy"] for item in current_days)
+        / len(current_days)
+    )
+
+    return MoodPersonalBaseline(
+        status="available",
+        window_days=14,
+        checkin_count=checkin_count,
+        active_days=active_days,
+        avg_valence=round(baseline_valence, 2),
+        avg_energy=round(baseline_energy, 2),
+        valence_delta=round(
+            current_valence - baseline_valence,
+            2,
+        ),
+        energy_delta=round(
+            current_energy - baseline_energy,
+            2,
+        ),
     )
