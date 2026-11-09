@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from config.settings import settings
 
 
-ANALYSIS_VERSION = 1
+ANALYSIS_VERSION = 2
 TOKEN_AUDIENCE = "weavemo-analysis-feedback"
 TOKEN_ISSUER = "weavemo-backend"
 
