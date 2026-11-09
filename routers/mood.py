@@ -316,7 +316,7 @@ def lookup_analysis_feedback(
 
     try:
         result = (
-            supabase.table("mood_analysis_feedback")
+            supabase.table("mood_analysis_helpfulness")
             .select("rating")
             .eq("user_id", int(current_user["user_id"]))
             .eq("report_key", claims["report_key"])
@@ -348,7 +348,7 @@ def save_analysis_feedback(
 
     try:
         result = (
-            supabase.table("mood_analysis_feedback")
+            supabase.table("mood_analysis_helpfulness")
             .upsert(
                 {
                     "user_id": int(current_user["user_id"]),
