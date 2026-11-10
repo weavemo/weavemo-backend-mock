@@ -1,3 +1,4 @@
+from routers.world_story import router as world_story_router
 import logging
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
@@ -13,6 +14,7 @@ from routers.token_exchange import router as token_exchange_router
 router = APIRouter()
 logger = logging.getLogger(__name__)
 router.include_router(token_exchange_router, prefix="/tokens")
+router.include_router(world_story_router, prefix="/story")
 
 
 @router.post("/initialize")
