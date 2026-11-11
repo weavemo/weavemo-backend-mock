@@ -99,7 +99,7 @@ def initialize_world(
 
             phase = rows[0].get("growth_phase")
 
-            if type(phase) is not int or not 1 <= phase <= 5:
+            if type(phase) is not int or not 1 <= phase <= 6:
                 raise ValueError("Invalid companion growth phase")
 
         except Exception as error:
