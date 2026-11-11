@@ -60,11 +60,18 @@ def get_current_user(
             algorithms=["HS256"],
             options={"verify_aud": False},
         )
-    except JWTError:
+    except JWTError as error:
+        logger.warning(
+            "Access token validation failed: %s: %s",
+            type(error).__name__,
+            str(error),
+        )
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
-        )
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from error
 
     auth_uid = payload.get("sub")
     email = payload.get("email")
