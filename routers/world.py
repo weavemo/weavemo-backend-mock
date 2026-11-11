@@ -74,7 +74,48 @@ def initialize_world(
             detail="Invalid world response",
         )
 
+    if companion["stage"] != "egg":
+        lifecycle_id = companion.get("lifecycle_id")
+
+        if not lifecycle_id:
+            raise HTTPException(
+                status_code=503,
+                detail="Companion lifecycle is missing",
+            )
+
+        try:
+            rows = (
+                supabase.table("companion_lifecycles")
+                .select("growth_phase")
+                .eq("id", str(lifecycle_id))
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+                .data
+            )
+
+            if not isinstance(rows, list) or len(rows) != 1:
+                raise ValueError("Companion lifecycle not found")
+
+            phase = rows[0].get("growth_phase")
+
+            if type(phase) is not int or not 1 <= phase <= 5:
+                raise ValueError("Invalid companion growth phase")
+
+        except Exception as error:
+            logger.exception("Companion growth phase lookup failed")
+
+            raise HTTPException(
+                status_code=503,
+                detail="Could not load companion growth phase",
+            ) from error
+
+        companion["growth_phase"] = phase
+    else:
+        companion["growth_phase"] = None
+
     return data
+
 
 @router.post("/companion/warm")
 def warm_companion(
