@@ -81,12 +81,31 @@ def get_stats_profile(
         today_str, _, _ = _user_today_range_utc(tz_offset_min)
     
         daily_xp = row["daily_xp"] if row["daily_xp_date"] == today_str else 0
-    
+        # 오늘 획득한 포인트: 지갑 거래 기록 기준
+        _, utc_start, utc_end = _user_today_range_utc(tz_offset_min)
+
+        points_res = (
+            supabase.table("point_transactions")
+            .select("amount")
+            .eq("user_id", user_id)
+            .gte("created_at", utc_start)
+            .lte("created_at", utc_end)
+            .gt("amount", 0)
+            .execute()
+        )
+
+        daily_points = sum(
+            int(item["amount"])
+            for item in (points_res.data or [])
+        )
+        
+        
         return {
             "level": row["level"],
             "xp": row["xp"],
             "streak_days": row["streak_days"],
             "daily_xp": daily_xp,
+            "daily_points": daily_points,
             "daily_xp_cap": 175,
             "plan": row.get("plan", "free"),
         }
