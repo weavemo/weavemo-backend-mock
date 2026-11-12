@@ -113,6 +113,75 @@ def get_stats_profile(
         traceback.print_exc()
         raise
 
+@router.post("/daily-checkin")
+def daily_checkin(
+    tz_offset_min: int = Query(0, ge=-840, le=840),
+    current_user=Depends(get_current_user),
+):
+    supabase = get_supabase()
+    user_id = current_user["user_id"]
+
+    today_str, _, _ = _user_today_range_utc(tz_offset_min)
+
+    # 같은 사용자, 같은 날짜의 출석 이벤트 중복 방지
+    existing = (
+        supabase.table("quest_activity_events")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("activity_source", "daily_checkin")
+        .eq("source_id", today_str)
+        .limit(1)
+        .execute()
+    )
+
+    if existing.data:
+        return {"ok": True, "already_checked_in": True}
+
+    try:
+        event_res = (
+            supabase.table("quest_activity_events")
+            .insert({
+                "user_id": user_id,
+                "activity_source": "daily_checkin",
+                "source_id": today_str,
+                "occurred_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .execute()
+        )
+    except Exception:
+        # 동시에 여러 요청이 발생했을 수 있으므로 재확인
+        existing = (
+            supabase.table("quest_activity_events")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("activity_source", "daily_checkin")
+            .eq("source_id", today_str)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return {"ok": True, "already_checked_in": True}
+        raise
+
+    event = (event_res.data or [None])[0]
+    if not event:
+        raise HTTPException(status_code=500, detail="Check-in event creation failed")
+
+    reward = supabase.rpc(
+        "grant_activity_points",
+        {
+            "p_user_id": user_id,
+            "p_event_id": event["id"],
+            "p_tz_offset_min": tz_offset_min,
+        },
+    ).execute()
+
+    return {
+        "ok": True,
+        "already_checked_in": False,
+        "reward": reward.data,
+    }
+
 
 @router.get("/actions/completed/today")
 def get_completed_actions_today(tz_offset_min: int = Query(0), current_user=Depends(get_current_user),):
