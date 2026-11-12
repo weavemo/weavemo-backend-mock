@@ -1,4 +1,4 @@
-# weavemo-backend-mock/routers/comments.py
+﻿# weavemo-backend-mock/routers/comments.py
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 import time
@@ -202,5 +202,39 @@ def create_comment(
         .update({"comments_count": new_cc})
         .eq("id", post_id)
     )
+    # 댓글 작성 보상: 하루 최대 2회, 각 10P
+    try:
+        import logging
+        from datetime import timezone
+
+        event_res = (
+            supabase.table("quest_activity_events")
+            .insert({
+                "user_id": current_user["user_id"],
+                "activity_source": "community_comment",
+                "source_id": str(row["id"]),
+                "occurred_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .execute()
+        )
+
+        event = (event_res.data or [None])[0]
+
+        if event:
+            supabase.rpc(
+                "grant_activity_points",
+                {
+                    "p_user_id": current_user["user_id"],
+                    "p_event_id": event["id"],
+                    "p_tz_offset_min": -420,
+                },
+            ).execute()
+
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "Community comment point reward failed"
+        )
+
     _attach_comment_author_names(supabase, [row])
     return _comment_to_dto(row, current_user)
+
