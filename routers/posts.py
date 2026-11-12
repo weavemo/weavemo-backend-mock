@@ -1,4 +1,4 @@
-# weavemo-backend-mock/routers/posts.py
+﻿# weavemo-backend-mock/routers/posts.py
 
 from time import perf_counter
 from datetime import datetime, date
@@ -325,6 +325,38 @@ def create_post(
     if not row:
         raise HTTPException(status_code=500, detail="Insert failed")
 
+    # 게시글 작성 보상: 기존 포인트 시스템 활용
+    try:
+        import logging
+        from datetime import timezone
+
+        event_res = (
+            supabase.table("quest_activity_events")
+            .insert({
+                "user_id": current_user["user_id"],
+                "activity_source": "community_post",
+                "source_id": str(row["id"]),
+                "occurred_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .execute()
+        )
+
+        event = (event_res.data or [None])[0]
+
+        if event:
+            supabase.rpc(
+                "grant_activity_points",
+                {
+                    "p_user_id": current_user["user_id"],
+                    "p_event_id": event["id"],
+                    "p_tz_offset_min": 0,
+                },
+            ).execute()
+
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "Community post point reward failed"
+        )
     _attach_author_names(supabase, [row])
     return _post_to_dto(row, current_user, include_content=True)
 
@@ -653,3 +685,5 @@ def update_post(
         current_user,
         include_content=True,
     )
+
+

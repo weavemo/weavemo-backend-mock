@@ -1,6 +1,6 @@
-from datetime import date, datetime, timedelta
+﻿from datetime import date, datetime, timedelta
 
-DAILY_XP_CAP = 150
+DAILY_XP_CAP = 175
 LEVEL_CUTOFFS = [
     0, 100, 200, 300, 400,
     500, 600, 700, 800, 900,
@@ -40,3 +40,4 @@ def calc_streak(last_date, today: date):
         return 1
 
     return -1
+

@@ -1,4 +1,4 @@
-# /routers/stats.py
+﻿# /routers/stats.py
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from datetime import date, datetime, time, timezone, timedelta
@@ -87,7 +87,7 @@ def get_stats_profile(
             "xp": row["xp"],
             "streak_days": row["streak_days"],
             "daily_xp": daily_xp,
-            "daily_xp_cap": 150,
+            "daily_xp_cap": 175,
             "plan": row.get("plan", "free"),
         }
     except Exception:
@@ -138,8 +138,8 @@ def increment_xp(
         source = "journal"
 
     expected_amounts = {
-        "mood": 10,
-        "journal": 10,
+        "mood": 20,
+        "journal": 20,
         "action": 15,
     }
 
@@ -194,3 +194,5 @@ def save_action_feedback(
     }).eq("user_id", user_id).eq("action_id", action_id).is_("feedback", None).execute()
 
     return {"ok": True}
+
+
