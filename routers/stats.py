@@ -123,7 +123,7 @@ def daily_checkin(
 
     today_str, _, _ = _user_today_range_utc(tz_offset_min)
 
-    # 같은 사용자, 같은 날짜의 출석 이벤트 중복 방지
+    # 오늘 출석 이벤트 확인
     existing = (
         supabase.table("quest_activity_events")
         .select("id")
@@ -134,40 +134,44 @@ def daily_checkin(
         .execute()
     )
 
-    if existing.data:
-        return {"ok": True, "already_checked_in": True}
+    event = (existing.data or [None])[0]
 
-    try:
-        event_res = (
-            supabase.table("quest_activity_events")
-            .insert({
-                "user_id": user_id,
-                "activity_source": "daily_checkin",
-                "source_id": today_str,
-                "occurred_at": datetime.now(timezone.utc).isoformat(),
-            })
-            .execute()
+    if event is None:
+        try:
+            created = (
+                supabase.table("quest_activity_events")
+                .insert({
+                    "user_id": user_id,
+                    "activity_source": "daily_checkin",
+                    "source_id": today_str,
+                    "occurred_at": datetime.now(timezone.utc).isoformat(),
+                })
+                .execute()
+            )
+            event = (created.data or [None])[0]
+        except Exception:
+            # 동시 요청으로 이미 생성되었을 수 있음
+            retry = (
+                supabase.table("quest_activity_events")
+                .select("id")
+                .eq("user_id", user_id)
+                .eq("activity_source", "daily_checkin")
+                .eq("source_id", today_str)
+                .limit(1)
+                .execute()
+            )
+            event = (retry.data or [None])[0]
+            if event is None:
+                raise
+
+    if event is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Check-in event creation failed",
         )
-    except Exception:
-        # 동시에 여러 요청이 발생했을 수 있으므로 재확인
-        existing = (
-            supabase.table("quest_activity_events")
-            .select("id")
-            .eq("user_id", user_id)
-            .eq("activity_source", "daily_checkin")
-            .eq("source_id", today_str)
-            .limit(1)
-            .execute()
-        )
-        if existing.data:
-            return {"ok": True, "already_checked_in": True}
-        raise
 
-    event = (event_res.data or [None])[0]
-    if not event:
-        raise HTTPException(status_code=500, detail="Check-in event creation failed")
-
-    reward = supabase.rpc(
+    # 기존 이벤트라도 지급을 재시도
+    result = supabase.rpc(
         "grant_activity_points",
         {
             "p_user_id": user_id,
@@ -178,8 +182,8 @@ def daily_checkin(
 
     return {
         "ok": True,
-        "already_checked_in": False,
-        "reward": reward.data,
+        "date": today_str,
+        "reward": result.data,
     }
 
 
