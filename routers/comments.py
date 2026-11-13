@@ -170,11 +170,11 @@ def create_comment(
         current_user,
     )
 
-is_anon = bool(body.get("isAnonymous", False))
-content = (body.get("content") or "").strip()
-
-# 응원 댓글 여부
-is_encouragement = body.get("isEncouragement") is True
+    is_anon = bool(body.get("isAnonymous", False))
+    content = (body.get("content") or "").strip()
+    
+    # 응원 댓글 여부
+    is_encouragement = body.get("isEncouragement") is True
     
     # 응원은 공개 댓글로만 작성
     if is_encouragement and is_anon:
