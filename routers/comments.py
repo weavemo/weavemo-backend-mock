@@ -197,6 +197,7 @@ def create_comment(
             "content": content,
             "is_anon": is_anon,
             "created_at": datetime.utcnow().isoformat(),
+            "is_encouragement": is_encouragement,
         })
         .execute()
     )
