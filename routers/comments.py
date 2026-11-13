@@ -173,15 +173,15 @@ def create_comment(
 is_anon = bool(body.get("isAnonymous", False))
 content = (body.get("content") or "").strip()
 
-# 응원 댓글 여부
-is_encouragement = body.get("isEncouragement") is True
-
-# 응원은 공개 댓글로만 작성
-if is_encouragement and is_anon:
-    raise HTTPException(
-        status_code=400,
-        detail="Encouragement cannot be anonymous",
-    )
+    # 응원 댓글 여부
+    is_encouragement = body.get("isEncouragement") is True
+    
+    # 응원은 공개 댓글로만 작성
+    if is_encouragement and is_anon:
+        raise HTTPException(
+            status_code=400,
+            detail="Encouragement cannot be anonymous",
+        )
     if not content:
         raise HTTPException(status_code=400, detail="Content required")
     if len(content) > 500:
