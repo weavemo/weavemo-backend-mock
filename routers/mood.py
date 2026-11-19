@@ -108,6 +108,45 @@ def submit_mood(
     )
 
 # --------------------------------------
+# Latest mood for adventure compass
+# --------------------------------------
+
+@router.get("/latest")
+def get_latest_mood(
+    supabase=Depends(get_supabase),
+    current_user=Depends(get_current_user),
+):
+    user_id = current_user["user_id"]
+
+    try:
+        result = (
+            supabase.table("moods")
+            .select("id, recorded_at, main_valence, energy")
+            .eq("user_id", user_id)
+            .order("recorded_at", desc=True)
+            .order("id", desc=True)
+            .limit(1)
+            .execute()
+        )
+    except Exception as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load latest mood",
+        ) from error
+
+    if not result.data:
+        return None
+
+    mood = result.data[0]
+    return {
+        "moodId": mood["id"],
+        "recordedAt": mood["recorded_at"],
+        "mainValence": mood["main_valence"],
+        "energy": mood["energy"],
+    }
+
+
+# --------------------------------------
 # Week 4 — Mood Analysis
 # --------------------------------------
 
