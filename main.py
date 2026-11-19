@@ -12,6 +12,7 @@ from routers import moderation
 from routers import presence
 from routers import community_reports
 from routers import admin_notes
+from routers import adventure
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import auth, user, mood, stats, action, journal, badge, journal_entries, weekly_summaries, zen_art, capsule, collection
@@ -160,4 +161,10 @@ app.include_router(
     companion_shop.router,
     prefix="/world/shop",
     tags=["Companion Shop"],
+)
+
+app.include_router(
+    adventure.router,
+    prefix="/adventure",
+    tags=["Adventure"],
 )
