@@ -2,8 +2,15 @@
 import math
 
 
-def load_companion_energy(db, user_id):
-    state = db.rpc("get_companion_energy_status", {"p_user_id": user_id}).execute().data
+def load_companion_energy(db, user_id, tz_offset_min=None):
+    params = {"p_user_id": user_id}
+    procedure = "get_companion_energy_status"
+    if tz_offset_min is not None:
+        if type(tz_offset_min) is not int or not -840 <= tz_offset_min <= 840:
+            raise ValueError("Invalid timezone offset")
+        procedure = "get_companion_energy_status_local_v1"
+        params["p_tz_offset_min"] = tz_offset_min
+    state = db.rpc(procedure, params).execute().data
     if not isinstance(state, dict) or state.get("stage") not in ("egg", "hatched", "grown"):
         raise ValueError("Invalid energy status")
     if state["stage"] != "egg":

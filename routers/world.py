@@ -457,7 +457,7 @@ def get_companion_care(
     supabase=Depends(get_supabase),
 ):
     try:
-        progress = load_companion_energy(supabase, current_user["user_id"])
+        progress = load_companion_energy(supabase, current_user["user_id"], tz_offset_min)
     except Exception as error:
         logger.exception("Companion care lookup failed")
         raise HTTPException(status_code=503, detail="Could not load companion care") from error
