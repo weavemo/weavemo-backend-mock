@@ -210,6 +210,67 @@ from datetime import datetime, timezone
 from fastapi import Query
 
 
+
+
+# Adventure letter notices reuse the existing inbox and its bell polling.
+# Opening an inbox item does NOT start the puzzle clock.
+def sync_adventure_letters(supabase, user_id: int) -> None:
+    from services.adventure_engine import advance, utc_now
+
+    journey_result = (
+        supabase.table("adventure_journeys").select("*")
+        .eq("user_id", user_id).limit(1).execute()
+    )
+    if not journey_result.data:
+        return
+    journey = journey_result.data[0]
+    region = int(journey["region"])
+    if not 1 <= region <= 8:
+        return
+
+    now = utc_now()
+    distance = advance(
+        journey["distance"], journey["energy"], journey["updated_at"], now
+    )
+    reached = min(5, int((distance + 1e-8) // 3))
+    if reached == 0:
+        return
+
+    completed_result = (
+        supabase.table("adventure_puzzle_progress").select("gate,status")
+        .eq("user_id", user_id).eq("region", region).execute()
+    )
+    completed = {
+        int(row["gate"])
+        for row in (completed_result.data or [])
+        if row["status"] == "completed"
+    }
+
+    # One outstanding letter at a time, in gate order.
+    for gate in range(1, reached + 1):
+        if gate in completed:
+            continue
+        if gate > 1 and gate - 1 not in completed:
+            break
+
+        event_key = f"adventure_letter:{user_id}:{region}:{gate}"
+        existing = (
+            supabase.table("user_notifications").select("id")
+            .eq("user_id", user_id).eq("event_key", event_key)
+            .limit(1).execute()
+        )
+        if not existing.data:
+            supabase.table("user_notifications").insert({
+                "user_id": user_id,
+                "kind": "adventure_letter",
+                "event_key": event_key,
+                "title": "귀향길에서 편지가 도착했어요",
+                "body": "전령새가 새로운 수수께끼 편지를 전해 왔어요. 편지를 열면 도전 시간이 시작됩니다.",
+                "target_path": "/adventure",
+            }).execute()
+        break
+
+
 @router.get("/inbox")
 def get_notification_inbox(
     limit: int = Query(default=20, ge=1, le=50),
@@ -220,6 +281,7 @@ def get_notification_inbox(
     user_id = current_user["user_id"]
 
     try:
+        sync_adventure_letters(supabase, int(user_id))
         query = (
             supabase.table("weavemo_visible_notifications")
             .select(
@@ -268,6 +330,7 @@ def get_notification_unread_count(
     user_id = current_user["user_id"]
 
     try:
+        sync_adventure_letters(supabase, int(user_id))
         result = (
             supabase.table("weavemo_visible_notifications")
             .select("id", count="exact", head=True)
