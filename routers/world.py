@@ -1,3 +1,4 @@
+from services.companion_energy import load_companion_energy
 from routers.world_story import router as world_story_router
 from routers.world_layout import router as world_layout_router
 import logging
@@ -73,6 +74,17 @@ def initialize_world(
             status_code=503,
             detail="Invalid world response",
         )
+
+    try:
+        progress = load_companion_energy(supabase, user_id)
+        if str(progress["lifecycle_id"]) != str(companion.get("lifecycle_id")):
+            data = supabase.rpc("initialize_my_world", {"p_user_id": user_id}).execute().data
+            companion = data["companion"]
+        companion["stage"] = progress["stage"]
+        data["progress"] = progress
+    except Exception as error:
+        logger.exception("Companion energy lookup failed")
+        raise HTTPException(status_code=503, detail="Could not load companion energy") from error
 
     if companion["stage"] != "egg":
         lifecycle_id = companion.get("lifecycle_id")
@@ -349,6 +361,17 @@ def hatch_companion(
             detail="Invalid companion hatch response",
         )
 
+    try:
+        progress = load_companion_energy(supabase, user_id)
+        if progress["stage"] == "egg":
+            remaining = supabase.rpc("get_companion_growth_status", {"p_user_id": user_id}).execute().data
+            return {"ok": False, "reason": "not_ready", "remaining_active_ms": remaining["remaining_active_ms"]}
+        companion["stage"] = progress["stage"]
+        companion["growth_phase"] = progress.get("growth_phase")
+        data["progress"] = progress
+    except Exception as error:
+        logger.exception("Hatched companion energy initialization failed")
+        raise HTTPException(status_code=503, detail="Could not load companion energy") from error
     return data
 
 CARE_SOURCES = {
@@ -362,6 +385,8 @@ CARE_SOURCES = {
 
 
 class CompanionCareRequest(BaseModel):
+    request_id: UUID
+    lifecycle_id: UUID
     action: Literal[
         "feed",
         "water",
@@ -386,11 +411,13 @@ def care_companion(
 ):
     try:
         result = supabase.rpc(
-            "care_my_companion",
+            "perform_companion_care_v1",
             {
                 "p_user_id": current_user["user_id"],
                 "p_tz_offset_min": body.tz_offset_min,
                 "p_action": body.action,
+                "p_request_id": str(body.request_id),
+                "p_lifecycle_id": str(body.lifecycle_id),
             },
         ).execute()
     except Exception as error:
@@ -402,15 +429,9 @@ def care_companion(
 
     data = result.data
 
-    if (
-        isinstance(data, dict)
-        and data.get("ok") is False
-        and data.get("reason") == "not_hatched"
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail="Companion has not hatched",
-        )
+    if isinstance(data, dict) and data.get("ok") is False:
+        reason = data.get("reason", "care_unavailable")
+        raise HTTPException(status_code=409, detail={"reason": reason, "progress": data.get("progress")})
 
     if (
         not isinstance(data, dict)
@@ -435,50 +456,14 @@ def get_companion_care(
     current_user=Depends(get_current_user),
     supabase=Depends(get_supabase),
 ):
-    offset = timedelta(minutes=tz_offset_min)
-    today = (datetime.now(timezone.utc) + offset).date()
-    start = datetime.combine(
-        today, datetime.min.time(), tzinfo=timezone.utc
-    ) - offset
-    end = start + timedelta(days=1)
-
     try:
-        result = (
-            supabase.table("quest_activity_events")
-            .select("activity_source")
-            .eq("user_id", current_user["user_id"])
-            .eq("source_id", f"daily:{today.isoformat()}")
-            .in_("activity_source", list(CARE_SOURCES.values()))
-            .gte("occurred_at", start.isoformat())
-            .lt("occurred_at", end.isoformat())
-            .execute()
-        )
-
-        rows = result.data
-
-        if not isinstance(rows, list) or any(
-            not isinstance(row, dict)
-            or row.get("activity_source") not in CARE_SOURCES.values()
-            for row in rows
-        ):
-            raise ValueError("Invalid care records")
-
-        sources = {row["activity_source"] for row in rows}
+        progress = load_companion_energy(supabase, current_user["user_id"])
     except Exception as error:
         logger.exception("Companion care lookup failed")
-        raise HTTPException(
-            status_code=503,
-            detail="Could not load companion care",
-        ) from error
+        raise HTTPException(status_code=503, detail="Could not load companion care") from error
+    today = (datetime.now(timezone.utc) + timedelta(minutes=tz_offset_min)).date()
+    return {"local_date": today.isoformat(), "completed_actions": [], "progress": progress}
 
-    return {
-        "local_date": today.isoformat(),
-        "completed_actions": [
-            action
-            for action, source in CARE_SOURCES.items()
-            if source in sources
-        ],
-    }
 
 def validate_care_reward(data: dict) -> None:
     gained = data.get("points_gained")
@@ -561,6 +546,14 @@ def get_world_summary(
             or balance < 0
         ):
             raise ValueError("Invalid summary values")
+
+        if stage in ("hatched", "grown"):
+            progress = load_companion_energy(supabase, user_id)
+            stage = progress["stage"]
+            if stage != "egg":
+                return {"local_date": today.isoformat(), "stage": stage,
+                        "has_pending_care": any(item.get("available") is True for item in progress["actions"].values()),
+                        "point_balance": balance}
 
         if stage == "egg":
             required = {"companion_warm"}

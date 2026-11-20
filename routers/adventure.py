@@ -113,7 +113,10 @@ def start_journey(db=Depends(get_supabase), user=Depends(get_current_user)):
            'direction': direction_for(mood['main_valence']),
            'energy': mood['energy'], 'last_mood_id': mood['id'],
            'started_at': now, 'updated_at': now}
-    db.table('adventure_journeys').upsert(row, on_conflict='user_id', ignore_duplicates=True).execute()
+    # SQL checks energy/readiness and creates the journey under the SAME user lock.
+    result = db.rpc('depart_companion_v1', {'p_user_id': user_id, 'p_journey': row}).execute().data
+    if not isinstance(result, dict) or result.get('ok') is not True:
+        raise HTTPException(status_code=409, detail='Companion is not ready for departure')
     stored = current_journey(db, user_id)
     if not stored:
         raise HTTPException(status_code=503, detail='Journey could not be loaded')
