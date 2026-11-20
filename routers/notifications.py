@@ -259,8 +259,8 @@ def sync_adventure_letters(supabase, user_id: int) -> None:
                 "user_id": user_id,
                 "kind": "adventure_letter",
                 "event_key": event_key,
-                "title": "귀향길에서 편지가 도착했어요",
-                "body": "전령새가 새로운 수수께끼 편지를 전해 왔어요. 편지를 열면 도전 시간이 시작됩니다.",
+                "title": "귀향길에서 새로운 난관을 만났어요",
+                "body": "동반자 새가 난관 앞에서 편지를 가져왔어요. 편지를 확인하고 길을 열어주세요.",
                 "target_path": "/adventure",
             }).execute()
         break
@@ -276,7 +276,10 @@ def get_notification_inbox(
     user_id = current_user["user_id"]
 
     try:
-        sync_adventure_letters(supabase, int(user_id))
+        try:
+            sync_adventure_letters(supabase, int(user_id))
+        except Exception:
+            logger.exception("Adventure letter sync failed; continuing with existing notifications")
         query = (
             supabase.table("weavemo_visible_notifications")
             .select(
@@ -323,7 +326,10 @@ def get_notification_unread_count(
     user_id = current_user["user_id"]
 
     try:
-        sync_adventure_letters(supabase, int(user_id))
+        try:
+            sync_adventure_letters(supabase, int(user_id))
+        except Exception:
+            logger.exception("Adventure letter sync failed; continuing with existing notifications")
         result = (
             supabase.table("weavemo_visible_notifications")
             .select("id", count="exact", head=True)

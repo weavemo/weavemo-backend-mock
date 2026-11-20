@@ -244,13 +244,27 @@ def complete_gate(region: int, gate: int, db=Depends(get_supabase), user=Depends
       .eq('status', 'playing').eq('deadline_at', row['deadline_at']).execute())
     if not result.data:
         raise HTTPException(status_code=409, detail='Attempt state changed')
-    journey = current_journey(db, user_id)
-    if journey and int(journey['region']) == region:
-        # Completion is the departure time from the checkpoint.
-        db.table('adventure_journeys').update({
+    # Reset the travel clock at completion, never at letter delivery.
+    # Refresh energy from the latest check-in before the next leg starts.
+    for _ in range(3):
+        journey = current_journey(db, user_id)
+        if not journey or int(journey['region']) != region:
+            break
+        mood = latest_mood(db, user_id)
+        fields = {
             'distance': max(float(journey['distance']), gate * 3),
             'updated_at': now.isoformat(),
-        }).eq('user_id', user_id).eq('updated_at', journey['updated_at']).execute()
+        }
+        if mood:
+            fields['energy'] = mood['energy']
+            fields['last_mood_id'] = mood['id']
+        saved = (db.table('adventure_journeys').update(fields)
+                 .eq('user_id', user_id).eq('updated_at', journey['updated_at'])
+                 .execute())
+        if saved.data:
+            break
+    else:
+        raise HTTPException(status_code=503, detail='Journey clock could not be updated')
     return public_gate(result.data[0], region, gate, now)
 
 
