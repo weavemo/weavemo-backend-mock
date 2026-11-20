@@ -28,12 +28,83 @@ def direction_for(valence):
     return {-2: 'west', -1: 'south', 0: 'north', 1: 'east', 2: 'northeast'}[int(valence)]
 
 
+
+
+def settle_journey(db, user_id, now=None):
+    """Persist travel only up to the next unsolved checkpoint.
+
+    The timestamp is rebased when a checkpoint is reached so that time spent
+    reading a letter or solving a puzzle never becomes retroactive travel.
+    """
+    now = now or utc_now()
+    for _ in range(3):
+        row = current_journey(db, user_id)
+        if not row:
+            return None
+        region = int(row['region'])
+        progress = (db.table('adventure_puzzle_progress').select('gate,status')
+                    .eq('user_id', user_id).eq('region', region).execute()).data or []
+        done = {int(item['gate']) for item in progress if item['status'] == 'completed'}
+        next_gate = next((gate for gate in range(1, 6) if gate not in done), None)
+        ceiling = float(next_gate * 3 if next_gate else 18)
+        distance = min(float(row['distance']), ceiling)
+        cursor = parse_time(row['updated_at'])
+        energy = row['energy']
+        last_mood_id = row['last_mood_id']
+        if distance < ceiling and cursor < now:
+            changes = (db.table('moods').select('id,energy,recorded_at')
+                       .eq('user_id', user_id).gt('recorded_at', cursor.isoformat())
+                       .lte('recorded_at', now.isoformat())
+                       .order('recorded_at').order('id').execute()).data or []
+            for change in changes:
+                change_time = parse_time(change['recorded_at'])
+                if change_time < cursor:
+                    continue
+                distance = min(ceiling, advance(distance, energy, cursor, change_time))
+                cursor = change_time
+                energy = change['energy']
+                last_mood_id = change['id']
+                if distance >= ceiling:
+                    break
+            if distance < ceiling:
+                distance = min(ceiling, advance(distance, energy, cursor, now))
+        # Once a checkpoint is reached, rebase the clock and freeze there.
+        # Keep the latest energy ready for travel after puzzle completion.
+        if distance >= ceiling:
+            mood = latest_mood(db, user_id)
+            if mood:
+                energy = mood['energy']
+                last_mood_id = mood['id']
+        if (abs(distance - float(row['distance'])) < 1e-9
+                and str(energy) == str(row['energy'])
+                and str(last_mood_id) == str(row['last_mood_id'])
+                and cursor >= now):
+            return row
+        updated = (db.table('adventure_journeys').update({
+            'distance': distance, 'energy': energy,
+            'last_mood_id': last_mood_id, 'updated_at': now.isoformat(),
+        }).eq('user_id', user_id).eq('updated_at', row['updated_at']).execute())
+        if updated.data:
+            return updated.data[0]
+    return current_journey(db, user_id)
+
+
+def journey_public_state(db, user_id, now=None):
+    now = now or utc_now()
+    row = settle_journey(db, user_id, now)
+    if not row:
+        return None
+    distance = min(18.0, float(row['distance']))
+    return {'region': row['region'], 'distance': round(distance, 6),
+            'progress': round(distance / 18.0, 6), 'arrived': distance >= 18,
+            'startedAt': row['started_at']}
+
 @router.post('/start')
 def start_journey(db=Depends(get_supabase), user=Depends(get_current_user)):
     user_id = int(user['user_id'])
     existing = current_journey(db, user_id)
     if existing:
-        return public_state(existing, utc_now())
+        return journey_public_state(db, user_id)
     mood = latest_mood(db, user_id)
     if not mood:
         raise HTTPException(status_code=409, detail='Mood check-in required before departure')
@@ -46,41 +117,12 @@ def start_journey(db=Depends(get_supabase), user=Depends(get_current_user)):
     stored = current_journey(db, user_id)
     if not stored:
         raise HTTPException(status_code=503, detail='Journey could not be loaded')
-    return public_state(stored, utc_now())
+    return journey_public_state(db, user_id)
 
 
 @router.get('/state')
 def get_journey_state(db=Depends(get_supabase), user=Depends(get_current_user)):
-    user_id = int(user['user_id'])
-    row = current_journey(db, user_id)
-    if not row:
-        return None
-    now = utc_now()
-    mood = latest_mood(db, user_id)
-    if mood and mood['id'] != row['last_mood_id']:
-        # Settle at each actual mood timestamp, not at the API request time.
-        changes_response = (db.table('moods').select('id,energy,recorded_at')
-                            .eq('user_id', user_id).gt('recorded_at', row['updated_at'])
-                            .lte('recorded_at', now.isoformat())
-                            .order('recorded_at').order('id').execute())
-        distance = float(row['distance'])
-        energy = row['energy']
-        cursor = row['updated_at']
-        last_id = row['last_mood_id']
-        for change in changes_response.data or []:
-            distance = advance(distance, energy, cursor, parse_time(change['recorded_at']))
-            energy = change['energy']
-            cursor = change['recorded_at']
-            last_id = change['id']
-        distance = advance(distance, energy, cursor, now)
-        if last_id != row['last_mood_id']:
-            updated = (db.table('adventure_journeys')
-                       .update({'distance': distance, 'energy': energy,
-                                'last_mood_id': last_id, 'updated_at': now.isoformat()})
-                       .eq('user_id', user_id).eq('last_mood_id', row['last_mood_id'])
-                       .execute())
-            row = updated.data[0] if updated.data else current_journey(db, user_id)
-    return public_state(row, now)
+    return journey_public_state(db, int(user['user_id']))
 
 
 def gate_row(db, user_id, region, gate):
@@ -121,10 +163,10 @@ def public_gate(row, region, gate, now):
 
 
 def gate_available(db, user_id, region, gate, now):
-    journey = current_journey(db, user_id)
+    journey = settle_journey(db, user_id, now)
     if not journey or int(journey['region']) != region:
         raise HTTPException(status_code=409, detail='Journey is not in this region')
-    distance = advance(journey['distance'], journey['energy'], journey['updated_at'], now)
+    distance = float(journey['distance'])
     if distance < gate * 3:
         raise HTTPException(status_code=409, detail='Gate has not been reached')
     if gate > 1:
@@ -199,4 +241,33 @@ def complete_gate(region: int, gate: int, db=Depends(get_supabase), user=Depends
       .eq('status', 'playing').eq('deadline_at', row['deadline_at']).execute())
     if not result.data:
         raise HTTPException(status_code=409, detail='Attempt state changed')
+    journey = current_journey(db, user_id)
+    if journey and int(journey['region']) == region:
+        # Completion is the departure time from the checkpoint.
+        db.table('adventure_journeys').update({
+            'distance': max(float(journey['distance']), gate * 3),
+            'updated_at': now.isoformat(),
+        }).eq('user_id', user_id).eq('updated_at', journey['updated_at']).execute()
     return public_gate(result.data[0], region, gate, now)
+
+
+@router.post('/dev/reach-first-gate')
+def dev_reach_first_gate(db=Depends(get_supabase), user=Depends(get_current_user)):
+    import os
+    if os.getenv('WEAVEMO_ADVENTURE_DEV_TEST') != '1':
+        raise HTTPException(status_code=404, detail='Not found')
+    user_id = int(user['user_id'])
+    now = utc_now()
+    journey = settle_journey(db, user_id, now)
+    if not journey or int(journey['region']) != 1:
+        raise HTTPException(status_code=409, detail='Start region one first')
+    first = gate_row(db, user_id, 1, 1)
+    if first and first['status'] == 'completed':
+        raise HTTPException(status_code=409, detail='First gate already completed')
+    result = (db.table('adventure_journeys').update({
+        'distance': 3.0, 'updated_at': now.isoformat(),
+    }).eq('user_id', user_id).eq('region', 1)
+      .eq('updated_at', journey['updated_at']).execute())
+    if not result.data:
+        raise HTTPException(status_code=409, detail='Journey changed; retry')
+    return journey_public_state(db, user_id, now)

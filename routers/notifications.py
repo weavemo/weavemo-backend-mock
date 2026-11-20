@@ -215,23 +215,18 @@ from fastapi import Query
 # Adventure letter notices reuse the existing inbox and its bell polling.
 # Opening an inbox item does NOT start the puzzle clock.
 def sync_adventure_letters(supabase, user_id: int) -> None:
-    from services.adventure_engine import advance, utc_now
+    from routers.adventure import settle_journey
+    from services.adventure_engine import utc_now
 
-    journey_result = (
-        supabase.table("adventure_journeys").select("*")
-        .eq("user_id", user_id).limit(1).execute()
-    )
-    if not journey_result.data:
+    journey = settle_journey(supabase, user_id)
+    if not journey:
         return
-    journey = journey_result.data[0]
     region = int(journey["region"])
     if not 1 <= region <= 8:
         return
 
     now = utc_now()
-    distance = advance(
-        journey["distance"], journey["energy"], journey["updated_at"], now
-    )
+    distance = float(journey["distance"])
     reached = min(5, int((distance + 1e-8) // 3))
     if reached == 0:
         return
