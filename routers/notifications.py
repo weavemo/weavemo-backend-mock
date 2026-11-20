@@ -307,10 +307,8 @@ def get_notification_inbox(
         }
 
     except Exception as error:
-        logger.error(
-            "Notification inbox load failed: %s",
-            type(error).__name__,
-        )
+        logger.exception("Notification inbox load failed: %s", error)
+        
         raise HTTPException(
             status_code=503,
             detail="Could not load notification inbox",
