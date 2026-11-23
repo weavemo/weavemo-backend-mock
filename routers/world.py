@@ -429,9 +429,17 @@ def care_companion(
 
     data = result.data
 
+    
     if isinstance(data, dict) and data.get("ok") is False:
         reason = data.get("reason", "care_unavailable")
-        raise HTTPException(status_code=409, detail={"reason": reason, "progress": data.get("progress")})
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "reason": reason,
+                "progress": data.get("progress"),
+                "item_key": data.get("item_key"),
+            },
+        )
 
     if (
         not isinstance(data, dict)
