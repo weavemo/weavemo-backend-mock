@@ -1,0 +1,1575 @@
+[
+  {
+    "region": 1,
+    "gate": 1,
+    "variant": 0,
+    "moves": [
+      "jf_1",
+      "jp_1_0",
+      "je_0",
+      "jp_1_0",
+      "jf_1",
+      "jp_1_0"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 1,
+    "gate": 1,
+    "variant": 1,
+    "moves": [
+      "jf_1",
+      "jp_1_0",
+      "je_0",
+      "jp_1_2",
+      "jf_1",
+      "jp_1_0",
+      "je_0",
+      "jp_2_0"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 1,
+    "gate": 1,
+    "variant": 2,
+    "moves": [
+      "jf_0",
+      "jp_0_2",
+      "jf_0",
+      "jp_0_2",
+      "jf_1",
+      "jp_1_0",
+      "jp_0_2",
+      "je_2"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 1,
+    "gate": 2,
+    "variant": 0,
+    "moves": [
+      "p0",
+      "p1",
+      "cross",
+      "p0",
+      "cross",
+      "p2",
+      "p3",
+      "cross",
+      "p1",
+      "cross",
+      "p0",
+      "p1",
+      "cross"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 1,
+    "gate": 2,
+    "variant": 1,
+    "moves": [
+      "p0",
+      "p1",
+      "cross",
+      "p0",
+      "cross",
+      "p2",
+      "p3",
+      "cross",
+      "p1",
+      "cross",
+      "p0",
+      "p1",
+      "cross"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 1,
+    "gate": 2,
+    "variant": 2,
+    "moves": [
+      "p0",
+      "p1",
+      "cross",
+      "p0",
+      "cross",
+      "p2",
+      "p3",
+      "cross",
+      "p1",
+      "cross",
+      "p0",
+      "p1",
+      "cross"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 1,
+    "gate": 3,
+    "variant": 0,
+    "moves": [
+      "t1",
+      "t2",
+      "t2",
+      "t3",
+      "t3",
+      "t3",
+      "t5",
+      "t6",
+      "t6",
+      "t7",
+      "t7",
+      "t7"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 1,
+    "gate": 3,
+    "variant": 1,
+    "moves": [
+      "t0",
+      "t0",
+      "t0",
+      "t2",
+      "t3",
+      "t3",
+      "t4",
+      "t4",
+      "t4",
+      "t6",
+      "t7",
+      "t7",
+      "t8",
+      "t8",
+      "t8",
+      "t10",
+      "t11",
+      "t11",
+      "t12",
+      "t12",
+      "t12",
+      "t14",
+      "t15",
+      "t15"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 1,
+    "gate": 3,
+    "variant": 2,
+    "moves": [
+      "t0",
+      "t0",
+      "t1",
+      "t1",
+      "t1",
+      "t3",
+      "t4",
+      "t4",
+      "t5",
+      "t5",
+      "t5",
+      "t7",
+      "t8",
+      "t8",
+      "t9",
+      "t9",
+      "t9",
+      "t11",
+      "t12",
+      "t12",
+      "t13",
+      "t13",
+      "t13",
+      "t15",
+      "t16",
+      "t16",
+      "t17",
+      "t17",
+      "t17",
+      "t19",
+      "t20",
+      "t20",
+      "t21",
+      "t21",
+      "t21",
+      "t23",
+      "t24",
+      "t24"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 1,
+    "gate": 4,
+    "variant": 0,
+    "moves": [
+      "s1",
+      "s3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 1,
+    "gate": 4,
+    "variant": 1,
+    "moves": [
+      "s1",
+      "s3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 1,
+    "gate": 4,
+    "variant": 2,
+    "moves": [
+      "s1",
+      "s3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 1,
+    "gate": 5,
+    "variant": 0,
+    "moves": [
+      "s0",
+      "s2",
+      "s1",
+      "s2",
+      "s2",
+      "s3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 1,
+    "gate": 5,
+    "variant": 1,
+    "moves": [
+      "s0",
+      "s1",
+      "s1",
+      "s3",
+      "s2",
+      "s3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 1,
+    "gate": 5,
+    "variant": 2,
+    "moves": [
+      "s0",
+      "s3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 2,
+    "gate": 1,
+    "variant": 0,
+    "moves": [
+      "s0",
+      "s0",
+      "s0",
+      "s1",
+      "s1",
+      "s1",
+      "s2",
+      "s2",
+      "s2"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 2,
+    "gate": 1,
+    "variant": 1,
+    "moves": [
+      "s0",
+      "s0",
+      "s0",
+      "s1",
+      "s1",
+      "s1",
+      "s2",
+      "s2",
+      "s2"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 2,
+    "gate": 1,
+    "variant": 2,
+    "moves": [
+      "s0",
+      "s0",
+      "s0",
+      "s1",
+      "s1",
+      "s1",
+      "s2",
+      "s2",
+      "s2"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 2,
+    "gate": 2,
+    "variant": 0,
+    "moves": [
+      "m0",
+      "m1"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 2,
+    "gate": 2,
+    "variant": 1,
+    "moves": [
+      "m0",
+      "m1",
+      "m2"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 2,
+    "gate": 2,
+    "variant": 2,
+    "moves": [
+      "m0",
+      "m1"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 2,
+    "gate": 3,
+    "variant": 0,
+    "moves": [
+      "c2",
+      "c4",
+      "c11",
+      "c13"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 2,
+    "gate": 3,
+    "variant": 1,
+    "moves": [
+      "c1",
+      "c7",
+      "c8",
+      "c14"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 2,
+    "gate": 3,
+    "variant": 2,
+    "moves": [
+      "c2",
+      "c4",
+      "c11",
+      "c13"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 2,
+    "gate": 4,
+    "variant": 0,
+    "moves": [
+      "ccw"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 2,
+    "gate": 4,
+    "variant": 1,
+    "moves": [
+      "ccw",
+      "ccw"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 2,
+    "gate": 4,
+    "variant": 2,
+    "moves": [
+      "ccw",
+      "ccw",
+      "ccw"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 2,
+    "gate": 5,
+    "variant": 0,
+    "moves": [
+      "down",
+      "down",
+      "down",
+      "down",
+      "right",
+      "right",
+      "up",
+      "up",
+      "up",
+      "up",
+      "right",
+      "right",
+      "down",
+      "down",
+      "down",
+      "down"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 2,
+    "gate": 5,
+    "variant": 1,
+    "moves": [
+      "right",
+      "right",
+      "right",
+      "right",
+      "down",
+      "down",
+      "down",
+      "down"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 2,
+    "gate": 5,
+    "variant": 2,
+    "moves": [
+      "down",
+      "down",
+      "down",
+      "down",
+      "right",
+      "right",
+      "right",
+      "right"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 3,
+    "gate": 1,
+    "variant": 0,
+    "moves": [
+      "l1",
+      "l1",
+      "l2",
+      "l2",
+      "l2"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 3,
+    "gate": 1,
+    "variant": 1,
+    "moves": [
+      "l0",
+      "l1",
+      "l1"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 3,
+    "gate": 1,
+    "variant": 2,
+    "moves": [
+      "l0",
+      "l0",
+      "l0",
+      "l1",
+      "l1"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 3,
+    "gate": 2,
+    "variant": 0,
+    "moves": [
+      "s1",
+      "s3",
+      "s5",
+      "s7",
+      "s9",
+      "s11"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 3,
+    "gate": 2,
+    "variant": 1,
+    "moves": [
+      "s3",
+      "s5",
+      "s8",
+      "s11"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 3,
+    "gate": 2,
+    "variant": 2,
+    "moves": [
+      "s1",
+      "s3",
+      "s5",
+      "s7",
+      "s9",
+      "s11"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 3,
+    "gate": 3,
+    "variant": 0,
+    "moves": [
+      "i1",
+      "cross",
+      "cross",
+      "i0",
+      "cross",
+      "i1",
+      "cross",
+      "i2",
+      "cross",
+      "cross",
+      "i1",
+      "cross"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 3,
+    "gate": 3,
+    "variant": 1,
+    "moves": [
+      "i0",
+      "i2",
+      "cross",
+      "cross",
+      "i1",
+      "i3",
+      "cross"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 3,
+    "gate": 3,
+    "variant": 2,
+    "moves": [
+      "i0",
+      "cross",
+      "cross",
+      "i1",
+      "i2",
+      "cross",
+      "i0",
+      "cross",
+      "i0",
+      "i3",
+      "cross"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 3,
+    "gate": 4,
+    "variant": 0,
+    "moves": [
+      "e0",
+      "e1",
+      "e2"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 3,
+    "gate": 4,
+    "variant": 1,
+    "moves": [
+      "e3",
+      "e4",
+      "e5"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 3,
+    "gate": 4,
+    "variant": 2,
+    "moves": [
+      "e2",
+      "e3",
+      "e8"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 3,
+    "gate": 5,
+    "variant": 0,
+    "moves": [
+      "e0",
+      "e1",
+      "e2",
+      "e3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 3,
+    "gate": 5,
+    "variant": 1,
+    "moves": [
+      "e0",
+      "e0",
+      "e1",
+      "e2",
+      "e3",
+      "e3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 3,
+    "gate": 5,
+    "variant": 2,
+    "moves": [
+      "e0",
+      "e1",
+      "e1",
+      "e2",
+      "e2",
+      "e3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 4,
+    "gate": 1,
+    "variant": 0,
+    "moves": [
+      "d2"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 4,
+    "gate": 1,
+    "variant": 1,
+    "moves": [
+      "d1"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 4,
+    "gate": 1,
+    "variant": 2,
+    "moves": [
+      "d1"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 4,
+    "gate": 2,
+    "variant": 0,
+    "moves": [
+      "r4",
+      "f6"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 4,
+    "gate": 2,
+    "variant": 1,
+    "moves": [
+      "r6",
+      "f6"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 4,
+    "gate": 2,
+    "variant": 2,
+    "moves": [
+      "r6",
+      "f8"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 4,
+    "gate": 3,
+    "variant": 0,
+    "moves": [
+      "w2",
+      "d4"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 4,
+    "gate": 3,
+    "variant": 1,
+    "moves": [
+      "w3",
+      "d6"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 4,
+    "gate": 3,
+    "variant": 2,
+    "moves": [
+      "w7",
+      "d4"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 4,
+    "gate": 4,
+    "variant": 0,
+    "moves": [
+      "d0",
+      "d1",
+      "d2",
+      "d2",
+      "d5",
+      "d5"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 4,
+    "gate": 4,
+    "variant": 1,
+    "moves": [
+      "d0",
+      "d1"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 4,
+    "gate": 4,
+    "variant": 2,
+    "moves": [
+      "d2",
+      "d2",
+      "d2",
+      "d1",
+      "d1",
+      "d1",
+      "d0",
+      "d0",
+      "d3",
+      "d3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 4,
+    "gate": 5,
+    "variant": 0,
+    "moves": [
+      "p0",
+      "p1",
+      "p2",
+      "p3",
+      "p4",
+      "p5"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 4,
+    "gate": 5,
+    "variant": 1,
+    "moves": [
+      "p0",
+      "p1",
+      "p2",
+      "p3",
+      "p4",
+      "p5"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 4,
+    "gate": 5,
+    "variant": 2,
+    "moves": [
+      "p1",
+      "p0",
+      "p2",
+      "p3",
+      "p5",
+      "p4"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 5,
+    "gate": 1,
+    "variant": 0,
+    "moves": [
+      "r1",
+      "r1",
+      "r1",
+      "r2",
+      "r2",
+      "r2",
+      "r3",
+      "r3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 5,
+    "gate": 1,
+    "variant": 1,
+    "moves": [
+      "r1",
+      "r1",
+      "r1",
+      "r2",
+      "r3",
+      "r3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 5,
+    "gate": 1,
+    "variant": 2,
+    "moves": [
+      "r1",
+      "r2",
+      "r2",
+      "r3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 5,
+    "gate": 2,
+    "variant": 0,
+    "moves": [
+      "q0_11",
+      "q1_12"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 5,
+    "gate": 2,
+    "variant": 1,
+    "moves": [
+      "q0_15",
+      "q1_9"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 5,
+    "gate": 2,
+    "variant": 2,
+    "moves": [
+      "q0_6",
+      "q1_11"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 5,
+    "gate": 3,
+    "variant": 0,
+    "moves": [
+      "s1",
+      "s2",
+      "s2",
+      "s4",
+      "s3",
+      "s4"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 5,
+    "gate": 3,
+    "variant": 1,
+    "moves": [
+      "s0",
+      "s3",
+      "s2",
+      "s4"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 5,
+    "gate": 3,
+    "variant": 2,
+    "moves": [
+      "s0",
+      "s2",
+      "s1",
+      "s2",
+      "s2",
+      "s3",
+      "s3",
+      "s4"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 5,
+    "gate": 4,
+    "variant": 0,
+    "moves": [],
+    "answer": "BIRD"
+  },
+  {
+    "region": 5,
+    "gate": 4,
+    "variant": 1,
+    "moves": [],
+    "answer": "TREE"
+  },
+  {
+    "region": 5,
+    "gate": 4,
+    "variant": 2,
+    "moves": [],
+    "answer": "MOON"
+  },
+  {
+    "region": 5,
+    "gate": 5,
+    "variant": 0,
+    "moves": [
+      "s1",
+      "s3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 5,
+    "gate": 5,
+    "variant": 1,
+    "moves": [
+      "s0",
+      "s1",
+      "s4"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 5,
+    "gate": 5,
+    "variant": 2,
+    "moves": [
+      "s0",
+      "s2",
+      "s4",
+      "s5"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 6,
+    "gate": 1,
+    "variant": 0,
+    "moves": [
+      "d3",
+      "d2",
+      "d3",
+      "d1",
+      "d0",
+      "d2",
+      "d3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 6,
+    "gate": 1,
+    "variant": 1,
+    "moves": [
+      "d2",
+      "d3",
+      "d1",
+      "d3",
+      "d2"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 6,
+    "gate": 1,
+    "variant": 2,
+    "moves": [
+      "d0",
+      "d2",
+      "d3",
+      "d1",
+      "d0",
+      "d2"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 6,
+    "gate": 2,
+    "variant": 0,
+    "moves": [
+      "heat",
+      "heat",
+      "cool"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 6,
+    "gate": 2,
+    "variant": 1,
+    "moves": [
+      "heat",
+      "heat",
+      "heat",
+      "heat",
+      "cool",
+      "cool",
+      "cool"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 6,
+    "gate": 2,
+    "variant": 2,
+    "moves": [
+      "heat",
+      "heat",
+      "heat",
+      "heat",
+      "heat",
+      "cool",
+      "cool",
+      "cool",
+      "cool"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 6,
+    "gate": 3,
+    "variant": 0,
+    "moves": [
+      "down",
+      "down",
+      "right",
+      "down",
+      "right",
+      "right"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 6,
+    "gate": 3,
+    "variant": 1,
+    "moves": [
+      "down",
+      "right",
+      "down",
+      "down",
+      "right",
+      "right"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 6,
+    "gate": 3,
+    "variant": 2,
+    "moves": [
+      "down",
+      "down",
+      "right",
+      "down",
+      "right",
+      "right"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 6,
+    "gate": 4,
+    "variant": 0,
+    "moves": [
+      "c0",
+      "c4",
+      "c1",
+      "c5"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 6,
+    "gate": 4,
+    "variant": 1,
+    "moves": [
+      "c0",
+      "c4",
+      "c1",
+      "c5",
+      "c2",
+      "c6"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 6,
+    "gate": 4,
+    "variant": 2,
+    "moves": [
+      "c0",
+      "c4",
+      "c1",
+      "c5",
+      "c2",
+      "c6",
+      "c3",
+      "c7"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 6,
+    "gate": 5,
+    "variant": 0,
+    "moves": [
+      "down",
+      "right",
+      "right",
+      "down",
+      "right",
+      "down"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 6,
+    "gate": 5,
+    "variant": 1,
+    "moves": [
+      "down",
+      "right",
+      "right",
+      "right",
+      "down",
+      "down"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 6,
+    "gate": 5,
+    "variant": 2,
+    "moves": [
+      "right",
+      "down",
+      "right",
+      "right",
+      "down",
+      "down"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 7,
+    "gate": 1,
+    "variant": 0,
+    "moves": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s0"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 7,
+    "gate": 1,
+    "variant": 1,
+    "moves": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s5",
+      "s0"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 7,
+    "gate": 1,
+    "variant": 2,
+    "moves": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s5",
+      "s6",
+      "s0"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 7,
+    "gate": 2,
+    "variant": 0,
+    "moves": [
+      "flip0",
+      "tick",
+      "flip1",
+      "tick"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 7,
+    "gate": 2,
+    "variant": 1,
+    "moves": [
+      "flip0",
+      "tick",
+      "flip1",
+      "tick"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 7,
+    "gate": 2,
+    "variant": 2,
+    "moves": [
+      "flip0",
+      "tick",
+      "flip1",
+      "tick"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 7,
+    "gate": 3,
+    "variant": 0,
+    "moves": [
+      "d3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 7,
+    "gate": 3,
+    "variant": 1,
+    "moves": [
+      "d3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 7,
+    "gate": 3,
+    "variant": 2,
+    "moves": [
+      "d0"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 7,
+    "gate": 4,
+    "variant": 0,
+    "moves": [
+      "p1",
+      "p1",
+      "p1",
+      "p2",
+      "p2",
+      "p2",
+      "p3",
+      "p3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 7,
+    "gate": 4,
+    "variant": 1,
+    "moves": [
+      "p1",
+      "p1",
+      "p1",
+      "p2",
+      "p3",
+      "p3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 7,
+    "gate": 4,
+    "variant": 2,
+    "moves": [
+      "p1",
+      "p2",
+      "p2"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 7,
+    "gate": 5,
+    "variant": 0,
+    "moves": [
+      "s0",
+      "s2",
+      "s1",
+      "s2",
+      "s2",
+      "s3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 7,
+    "gate": 5,
+    "variant": 1,
+    "moves": [
+      "s0",
+      "s3",
+      "s2",
+      "s3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 7,
+    "gate": 5,
+    "variant": 2,
+    "moves": [
+      "s0",
+      "s1",
+      "s1",
+      "s3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 8,
+    "gate": 1,
+    "variant": 0,
+    "moves": [
+      "c빨강",
+      "c초록"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 8,
+    "gate": 1,
+    "variant": 1,
+    "moves": [
+      "c초록",
+      "c파랑"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 8,
+    "gate": 1,
+    "variant": 2,
+    "moves": [
+      "c빨강",
+      "c파랑"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 8,
+    "gate": 2,
+    "variant": 0,
+    "moves": [
+      "h0",
+      "h5"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 8,
+    "gate": 2,
+    "variant": 1,
+    "moves": [
+      "h1",
+      "h4"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 8,
+    "gate": 2,
+    "variant": 2,
+    "moves": [
+      "h2",
+      "h3"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 8,
+    "gate": 3,
+    "variant": 0,
+    "moves": [
+      "t0"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 8,
+    "gate": 3,
+    "variant": 1,
+    "moves": [
+      "t0",
+      "t4"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 8,
+    "gate": 3,
+    "variant": 2,
+    "moves": [
+      "t0",
+      "t4",
+      "t8"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 8,
+    "gate": 4,
+    "variant": 0,
+    "moves": [
+      "t0",
+      "f1"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 8,
+    "gate": 4,
+    "variant": 1,
+    "moves": [
+      "f0",
+      "t1"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 8,
+    "gate": 4,
+    "variant": 2,
+    "moves": [
+      "f0",
+      "t1"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 8,
+    "gate": 5,
+    "variant": 0,
+    "moves": [
+      "s0",
+      "s2",
+      "s5"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 8,
+    "gate": 5,
+    "variant": 1,
+    "moves": [
+      "s1",
+      "s3",
+      "s4",
+      "s6"
+    ],
+    "answer": ""
+  },
+  {
+    "region": 8,
+    "gate": 5,
+    "variant": 2,
+    "moves": [
+      "s0",
+      "s2",
+      "s3",
+      "s5",
+      "s7"
+    ],
+    "answer": ""
+  }
+]

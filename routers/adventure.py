@@ -1,13 +1,14 @@
 # routers/adventure.py
-from datetime import timedelta
+from typing import Annotated, Literal
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from fastapi import APIRouter, Depends, HTTPException
 from db.database import get_supabase
 from dependencies.auth import get_current_user
-from services.adventure_engine import advance, public_state, utc_now, parse_time
+from services.adventure_engine import advance, utc_now, parse_time
+from services.adventure_puzzle import run_puzzle
 
 router = APIRouter()
 GATE_MINUTES = (5, 8, 10, 15, 20)
-COOLDOWN = timedelta(hours=8)
 
 
 def latest_mood(db, user_id):
@@ -42,9 +43,9 @@ def settle_journey(db, user_id, now=None):
         if not row:
             return None
         region = int(row['region'])
-        progress = (db.table('adventure_puzzle_progress').select('gate,status')
+        progress = (db.table('adventure_puzzle_progress').select('gate,status,verified_at')
                     .eq('user_id', user_id).eq('region', region).execute()).data or []
-        done = {int(item['gate']) for item in progress if item['status'] == 'completed'}
+        done = {int(item['gate']) for item in progress if item['status'] == 'completed' and item['verified_at']}
         next_gate = next((gate for gate in range(1, 6) if gate not in done), None)
         ceiling = float(next_gate * 3 if next_gate else 18)
         distance = min(float(row['distance']), ceiling)
@@ -75,6 +76,8 @@ def settle_journey(db, user_id, now=None):
             if mood:
                 energy = mood['energy']
                 last_mood_id = mood['id']
+        if cursor > now:
+            return row
         if (abs(distance - float(row['distance'])) < 1e-9
                 and str(energy) == str(row['energy'])
                 and str(last_mood_id) == str(row['last_mood_id'])
@@ -95,9 +98,13 @@ def journey_public_state(db, user_id, now=None):
     if not row:
         return None
     distance = min(18.0, float(row['distance']))
-    return {'region': row['region'], 'distance': round(distance, 6),
+    completed = (db.table('adventure_puzzle_progress').select('region,gate')
+                 .eq('user_id', user_id).eq('status', 'completed')
+                 .not_.is_('verified_at', 'null').execute()).data or []
+    return {'region': row['region'], 'distance': distance,
             'progress': round(distance / 18.0, 6), 'arrived': distance >= 18,
-            'startedAt': row['started_at']}
+            'startedAt': row['started_at'],
+            'completedGates': sorted((p['region'] - 1) * 5 + p['gate'] - 1 for p in completed)}
 
 @router.post('/start')
 def start_journey(db=Depends(get_supabase), user=Depends(get_current_user)):
@@ -128,163 +135,114 @@ def get_journey_state(db=Depends(get_supabase), user=Depends(get_current_user)):
     return journey_public_state(db, int(user['user_id']))
 
 
-def gate_row(db, user_id, region, gate):
-    result = (db.table('adventure_puzzle_progress').select('*')
-              .eq('user_id', user_id).eq('region', region).eq('gate', gate)
-              .limit(1).execute())
-    return result.data[0] if result.data else None
+Language = Literal['ko', 'en']
+ActionCode = Annotated[str, StringConstraints(min_length=1, max_length=32, pattern=r'^[\w-]+$')]
 
 
-def validate_gate(region, gate):
+class PuzzleAction(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    operation: Literal['move', 'reset', 'submit']
+    attempt: int = Field(ge=1, strict=True)
+    revision: int = Field(ge=0, strict=True)
+    move: ActionCode | None = None
+    answer: str = Field(default='', max_length=80)
+
+
+class RegionAdvance(BaseModel):
+    region: int = Field(ge=1, le=7)
+
+
+def gate_rpc(db, user_id, region, gate, operation, **parameters):
     if not (1 <= region <= 8 and 1 <= gate <= 5):
         raise HTTPException(status_code=404, detail='Unknown gate')
+    return db.rpc('adventure_gate_v1', {
+        'p_user_id': user_id, 'p_region': region, 'p_gate': gate,
+        'p_operation': operation, **parameters,
+    }).execute().data
 
 
-def settle_expiry(db, row, now):
-    if row and row['status'] == 'playing' and row.get('deadline_at') and parse_time(row['deadline_at']) <= now:
-        until = parse_time(row['deadline_at']) + COOLDOWN
-        result = (db.table('adventure_puzzle_progress')
-                  .update({'status': 'cooldown', 'cooldown_until': until.isoformat()})
-                  .eq('user_id', row['user_id']).eq('region', row['region'])
-                  .eq('gate', row['gate']).eq('status', 'playing')
-                  .eq('deadline_at', row['deadline_at']).execute())
-        return result.data[0] if result.data else gate_row(db, row['user_id'], row['region'], row['gate'])
-    return row
-
-
-def public_gate(row, region, gate, now):
-    status = row['status'] if row else 'pending'
-    if status == 'cooldown' and row.get('cooldown_until') and parse_time(row['cooldown_until']) <= now:
-        status = 'retry_ready'
-    return {'region': region, 'gate': gate, 'status': status,
-            'limitSeconds': GATE_MINUTES[gate - 1] * 60,
-            'deadlineAt': row.get('deadline_at') if status == 'playing' else None,
-            'cooldownUntil': row.get('cooldown_until') if status == 'cooldown' else None,
-            'completedAt': row.get('completed_at') if row else None,
-            'attemptCount': row.get('attempt_count', 0) if row else 0,
-            'serverNow': now.isoformat()}
-
-
-def gate_available(db, user_id, region, gate, now):
-    journey = settle_journey(db, user_id, now)
-    if not journey or int(journey['region']) != region:
-        raise HTTPException(status_code=409, detail='Journey is not in this region')
-    distance = float(journey['distance'])
-    if distance < gate * 3:
-        raise HTTPException(status_code=409, detail='Gate has not been reached')
-    if gate > 1:
-        previous = gate_row(db, user_id, region, gate - 1)
-        if not previous or previous['status'] != 'completed':
-            raise HTTPException(status_code=409, detail='Previous gate is incomplete')
+def gate_response(result, region, gate, lang=None, board=None):
+    if result['error'] == 'locked':
+        raise HTTPException(status_code=409, detail='Gate is locked')
+    row = result['row'] or {}
+    status = 'retry_ready' if result['retryReady'] else row.get('status', 'pending')
+    response = {
+        'region': region, 'gate': gate, 'status': status,
+        'limitSeconds': GATE_MINUTES[gate - 1] * 60,
+        'deadlineAt': row.get('deadline_at') if status == 'playing' else None,
+        'cooldownUntil': row.get('cooldown_until') if status == 'cooldown' else None,
+        'completedAt': row.get('completed_at'),
+        'attemptCount': row.get('attempt_count', 0),
+        'revision': row.get('revision', 0),
+        'serverNow': result['now'],
+        'conflict': result['error'],
+    }
+    if lang and status == 'playing':
+        payload = board if board is not None else run_puzzle(row, 'read', lang)
+        response['puzzle'] = {**payload, 'lang': lang}
+    return response
 
 
 @router.get('/gates/{region}/{gate}')
 def get_gate(region: int, gate: int, db=Depends(get_supabase), user=Depends(get_current_user)):
-    validate_gate(region, gate)
-    user_id = int(user['user_id'])
-    now = utc_now()
-    row = settle_expiry(db, gate_row(db, user_id, region, gate), now)
-    return public_gate(row, region, gate, now)
+    result = gate_rpc(db, int(user['user_id']), region, gate, 'read')
+    return gate_response(result, region, gate)
+
+
+@router.get('/gates/{region}/{gate}/puzzle')
+def get_puzzle(region: int, gate: int, lang: Language = 'ko',
+               db=Depends(get_supabase), user=Depends(get_current_user)):
+    result = gate_rpc(db, int(user['user_id']), region, gate, 'read')
+    return gate_response(result, region, gate, lang)
 
 
 @router.post('/gates/{region}/{gate}/open')
-def open_gate(region: int, gate: int, db=Depends(get_supabase), user=Depends(get_current_user)):
-    validate_gate(region, gate)
+def open_gate(region: int, gate: int, lang: Language = 'ko',
+              db=Depends(get_supabase), user=Depends(get_current_user)):
     user_id = int(user['user_id'])
-    now = utc_now()
-    gate_available(db, user_id, region, gate, now)
-    row = settle_expiry(db, gate_row(db, user_id, region, gate), now)
-    if row and row['status'] == 'completed':
-        return public_gate(row, region, gate, now)
-    if row and row['status'] == 'playing':
-        return public_gate(row, region, gate, now)
-    if row and row['status'] == 'cooldown' and parse_time(row['cooldown_until']) > now:
-        raise HTTPException(status_code=409, detail='Retry cooldown active')
-    deadline = now + timedelta(minutes=GATE_MINUTES[gate - 1])
-    if not row:
-        # Unique PK prevents two concurrent initial attempts.
-        try:
-            result = db.table('adventure_puzzle_progress').insert({
-                'user_id': user_id, 'region': region, 'gate': gate,
-                'status': 'playing', 'started_at': now.isoformat(),
-                'deadline_at': deadline.isoformat(), 'attempt_count': 1,
-            }).execute()
-            return public_gate(result.data[0], region, gate, now)
-        except Exception as error:
-            if str(getattr(error, 'code', '')) != '23505':
-                raise
-            row = gate_row(db, user_id, region, gate)
-            return public_gate(settle_expiry(db, row, now), region, gate, now)
-    result = (db.table('adventure_puzzle_progress').update({
-        'status': 'playing', 'started_at': now.isoformat(),
-        'deadline_at': deadline.isoformat(), 'cooldown_until': None,
-        'attempt_count': int(row['attempt_count']) + 1,
-    }).eq('user_id', user_id).eq('region', region).eq('gate', gate)
-      .eq('status', 'cooldown').eq('cooldown_until', row['cooldown_until']).execute())
-    if not result.data:
-        return public_gate(settle_expiry(db, gate_row(db, user_id, region, gate), now), region, gate, now)
-    return public_gate(result.data[0], region, gate, now)
+    if not (1 <= region <= 8 and 1 <= gate <= 5):
+        raise HTTPException(status_code=404, detail='Unknown gate')
+    settle_journey(db, user_id)
+    result = gate_rpc(db, user_id, region, gate, 'open')
+    return gate_response(result, region, gate, lang)
 
 
-@router.post('/gates/{region}/{gate}/complete')
-def complete_gate(region: int, gate: int, db=Depends(get_supabase), user=Depends(get_current_user)):
-    validate_gate(region, gate)
+@router.post('/gates/{region}/{gate}/puzzle')
+def play_puzzle(region: int, gate: int, body: PuzzleAction, lang: Language = 'ko',
+                db=Depends(get_supabase), user=Depends(get_current_user)):
     user_id = int(user['user_id'])
-    now = utc_now()
-    row = settle_expiry(db, gate_row(db, user_id, region, gate), now)
+    current = gate_rpc(db, user_id, region, gate, 'read')
+    row = current['row']
     if not row or row['status'] != 'playing':
-        raise HTTPException(status_code=409, detail='No active attempt')
-    if parse_time(row['deadline_at']) <= now:
-        settle_expiry(db, row, now)
-        raise HTTPException(status_code=409, detail='Attempt expired')
-    # NOTE: completion is an authenticated client report, not a server-verified solution.
-    result = (db.table('adventure_puzzle_progress').update({
-        'status': 'completed', 'completed_at': now.isoformat(),
-    }).eq('user_id', user_id).eq('region', region).eq('gate', gate)
-      .eq('status', 'playing').eq('deadline_at', row['deadline_at']).execute())
-    if not result.data:
-        raise HTTPException(status_code=409, detail='Attempt state changed')
-    # Reset the travel clock at completion, never at letter delivery.
-    # Refresh energy from the latest check-in before the next leg starts.
-    for _ in range(3):
-        journey = current_journey(db, user_id)
-        if not journey or int(journey['region']) != region:
-            break
-        mood = latest_mood(db, user_id)
-        fields = {
-            'distance': max(float(journey['distance']), gate * 3),
-            'updated_at': now.isoformat(),
-        }
-        if mood:
-            fields['energy'] = mood['energy']
-            fields['last_mood_id'] = mood['id']
-        saved = (db.table('adventure_journeys').update(fields)
-                 .eq('user_id', user_id).eq('updated_at', journey['updated_at'])
-                 .execute())
-        if saved.data:
-            break
-    else:
-        raise HTTPException(status_code=503, detail='Journey clock could not be updated')
-    return public_gate(result.data[0], region, gate, now)
+        return gate_response(current, region, gate, lang)
+    if (row['attempt_count'], row['revision']) != (body.attempt, body.revision):
+        current['error'] = 'stale'
+        return gate_response(current, region, gate, lang)
+    board = None
+    parameters = {'p_attempt': body.attempt, 'p_revision': body.revision}
+    if body.operation == 'move':
+        if not body.move:
+            raise HTTPException(status_code=422, detail='Puzzle action is required')
+        if len(row['moves']) < 256:
+            board = run_puzzle(row, 'move', lang, move=body.move)
+            if board.get('invalid'):
+                raise HTTPException(status_code=422, detail='Invalid puzzle action')
+        parameters['p_move'] = body.move
+    elif body.operation == 'submit':
+        parameters['p_correct'] = run_puzzle(row, 'submit', lang, answer=body.answer)['correct']
+        if parameters['p_correct']:
+            settle_journey(db, user_id)
+    result = gate_rpc(db, user_id, region, gate, body.operation, **parameters)
+    return gate_response(result, region, gate, lang, board if result['changed'] else None)
 
 
-@router.post('/dev/reach-first-gate')
-def dev_reach_first_gate(db=Depends(get_supabase), user=Depends(get_current_user)):
-    import os
-    if os.getenv('WEAVEMO_ADVENTURE_DEV_TEST') != '1':
-        raise HTTPException(status_code=404, detail='Not found')
+@router.post('/next-region')
+def next_region(body: RegionAdvance, db=Depends(get_supabase), user=Depends(get_current_user)):
     user_id = int(user['user_id'])
-    now = utc_now()
-    journey = settle_journey(db, user_id, now)
-    if not journey or int(journey['region']) != 1:
-        raise HTTPException(status_code=409, detail='Start region one first')
-    first = gate_row(db, user_id, 1, 1)
-    if first and first['status'] == 'completed':
-        raise HTTPException(status_code=409, detail='First gate already completed')
-    result = (db.table('adventure_journeys').update({
-        'distance': 3.0, 'updated_at': now.isoformat(),
-    }).eq('user_id', user_id).eq('region', 1)
-      .eq('updated_at', journey['updated_at']).execute())
-    if not result.data:
-        raise HTTPException(status_code=409, detail='Journey changed; retry')
-    return journey_public_state(db, user_id, now)
+    settle_journey(db, user_id)
+    moved = db.rpc('adventure_next_region_v1', {
+        'p_user_id': user_id, 'p_region': body.region,
+    }).execute().data
+    if not moved:
+        raise HTTPException(status_code=409, detail='Region is not complete')
+    return journey_public_state(db, user_id)
