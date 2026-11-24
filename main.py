@@ -1,10 +1,12 @@
 # main.py
+# main.py
 
 from routers import companion_shop
 from routers import community_blocks
 from routers import dust
 from routers import world
 from routers import quests
+from routers import daily_mystery
 from routers import friends
 from routers import hidden_content
 from routers import post_media
@@ -168,3 +170,5 @@ app.include_router(
     prefix="/adventure",
     tags=["Adventure"],
 )
+
+app.include_router(daily_mystery.router, prefix="/daily-mystery", tags=["Daily Mystery"])
