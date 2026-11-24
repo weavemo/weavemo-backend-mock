@@ -3,6 +3,7 @@
 import logging
 from uuid import uuid4
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel, Field
 from fastapi.responses import Response
 from db.database import get_supabase
 from dependencies.auth import get_current_user
@@ -82,10 +83,20 @@ def submit_photo(entry_id: int, file: UploadFile = File(...),
 def album(user=Depends(get_current_user), db=Depends(get_supabase)):
     try:
         rows = (db.table("d26_mystery_entries")
-                .select("id,local_date,prompt_id,completed_at")
+                .select("id,local_date,prompt_id,completed_at,reflection_note")
                 .eq("user_id", _uid(user)).not_.is_("completed_at", "null")
                 .order("completed_at", desc=True).limit(100).execute().data)
-        return {"items": rows or []}
+        prompts = (db.table("d26_mystery_prompts")
+                   .select("id,title_ko,title_en,reflection_ko,reflection_en")
+                   .execute().data or [])
+        lookup = {int(p["id"]): p for p in prompts}
+        awards = (db.table("d26_memory_awards")
+                  .select("milestone,reward_key,granted_at")
+                  .eq("user_id", _uid(user)).order("milestone").execute().data or [])
+        items = [{**row, "prompt": lookup.get(row["prompt_id"])} for row in (rows or [])]
+        count_result = (db.table("d26_mystery_entries").select("id", count="exact", head=True)
+                        .eq("user_id", _uid(user)).not_.is_("completed_at", "null").execute())
+        return {"items": items, "awards": awards, "count": count_result.count or 0}
     except Exception as exc:
         logger.exception("D26 album lookup failed")
         raise HTTPException(503, "Album unavailable") from exc
@@ -103,3 +114,24 @@ def get_photo(entry_id: int, user=Depends(get_current_user), db=Depends(get_supa
         raise HTTPException(503, "Photo unavailable") from exc
     return Response(content=content, media_type="image/webp", headers={
         "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+
+
+class ReflectionUpdate(BaseModel):
+    note: str = Field(max_length=500)
+
+
+@router.patch("/{entry_id}/reflection")
+def update_reflection(entry_id: int, payload: ReflectionUpdate,
+                      user=Depends(get_current_user), db=Depends(get_supabase)):
+    uid = _uid(user)
+    entry = _entry(db, uid, entry_id)
+    if not entry["completed_at"]:
+        raise HTTPException(409, "Complete the photo mission first")
+    try:
+        db.table("d26_mystery_entries").update({
+            "reflection_note": payload.note.strip()
+        }).eq("id", entry_id).eq("user_id", uid).execute()
+        return {"ok": True}
+    except Exception as exc:
+        logger.exception("D26 reflection save failed")
+        raise HTTPException(503, "Could not save reflection") from exc
