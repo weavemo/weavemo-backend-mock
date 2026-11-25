@@ -135,3 +135,42 @@ def update_reflection(entry_id: int, payload: ReflectionUpdate,
     except Exception as exc:
         logger.exception("D26 reflection save failed")
         raise HTTPException(503, "Could not save reflection") from exc
+
+
+class AlbumDecorationUpdate(BaseModel):
+    cover: str = Field(pattern=r"^(classic|storybook|starlight)$")
+    frame: str = Field(pattern=r"^(none|memory)$")
+
+
+@router.get("/album/decoration")
+def get_album_decoration(user=Depends(get_current_user), db=Depends(get_supabase)):
+    try:
+        rows = (db.table("d26_album_decorations").select("cover,frame")
+                .eq("user_id", _uid(user)).limit(1).execute().data or [])
+        return rows[0] if rows else {"cover": "classic", "frame": "none"}
+    except Exception as exc:
+        logger.exception("D26 album decoration lookup failed")
+        raise HTTPException(503, "Album decoration unavailable") from exc
+
+
+@router.put("/album/decoration")
+def put_album_decoration(payload: AlbumDecorationUpdate,
+                         user=Depends(get_current_user), db=Depends(get_supabase)):
+    uid = _uid(user)
+    required = {"storybook": 7, "starlight": 100, "memory": 30}
+    try:
+        awards = (db.table("d26_memory_awards").select("milestone")
+                  .eq("user_id", uid).execute().data or [])
+        unlocked = {int(row["milestone"]) for row in awards}
+        if ((payload.cover in required and required[payload.cover] not in unlocked)
+                or (payload.frame in required and required[payload.frame] not in unlocked)):
+            raise HTTPException(403, "Decoration is locked")
+        db.table("d26_album_decorations").upsert({
+            "user_id": uid, "cover": payload.cover, "frame": payload.frame
+        }, on_conflict="user_id").execute()
+        return {"cover": payload.cover, "frame": payload.frame}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("D26 album decoration save failed")
+        raise HTTPException(503, "Could not save album decoration") from exc
