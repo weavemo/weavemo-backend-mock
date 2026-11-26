@@ -82,10 +82,20 @@ def submit_photo(entry_id: int, file: UploadFile = File(...),
 @router.get("/album")
 def album(user=Depends(get_current_user), db=Depends(get_supabase)):
     try:
-        rows = (db.table("d26_mystery_entries")
-                .select("id,local_date,prompt_id,completed_at,reflection_note")
-                .eq("user_id", _uid(user)).not_.is_("completed_at", "null")
-                .order("completed_at", desc=True).limit(100).execute().data)
+        # Fetch every completed photo in bounded batches. Supabase/PostgREST may
+        # cap a single response at 1,000 rows; the scrapbook needs older photos too.
+        rows = []
+        batch_size = 500
+        while True:
+            batch = (db.table("d26_mystery_entries")
+                     .select("id,local_date,prompt_id,completed_at,reflection_note")
+                     .eq("user_id", _uid(user)).not_.is_("completed_at", "null")
+                     .order("completed_at", desc=True).order("id", desc=True)
+                     .range(len(rows), len(rows) + batch_size - 1)
+                     .execute().data or [])
+            rows.extend(batch)
+            if len(batch) < batch_size:
+                break
         prompts = (db.table("d26_mystery_prompts")
                    .select("id,title_ko,title_en,reflection_ko,reflection_en")
                    .execute().data or [])
