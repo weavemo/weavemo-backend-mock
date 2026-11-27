@@ -47,7 +47,12 @@ def settle_journey(db, user_id, now=None):
                     .eq('user_id', user_id).eq('region', region).execute()).data or []
         done = {int(item['gate']) for item in progress if item['status'] == 'completed' and item['verified_at']}
         next_gate = next((gate for gate in range(1, 6) if gate not in done), None)
-        ceiling = float(next_gate * 3 if next_gate else 18)
+        # A cleared gate does not automatically authorize the next leg.
+        # Existing users retain their already-reached distance via migration.
+        permission = (db.table('adventure_travel_permissions').select('allowed_distance')
+                      .eq('user_id', user_id).eq('region', region).limit(1).execute()).data
+        allowed = float(permission[0]['allowed_distance']) if permission else 3.0
+        ceiling = min(float(next_gate * 3 if next_gate else 18), allowed)
         distance = min(float(row['distance']), ceiling)
         cursor = parse_time(row['updated_at'])
         energy = row['energy']
@@ -101,7 +106,14 @@ def journey_public_state(db, user_id, now=None):
     completed = (db.table('adventure_puzzle_progress').select('region,gate')
                  .eq('user_id', user_id).eq('status', 'completed')
                  .not_.is_('verified_at', 'null').execute()).data or []
-    return {'region': row['region'], 'distance': distance,
+    gate_at_checkpoint = min(5, max(1, int(distance // 3)))
+    permission = (db.table('adventure_travel_permissions').select('allowed_distance')
+                  .eq('user_id', user_id).eq('region', row['region']).limit(1).execute()).data
+    allowed = float(permission[0]['allowed_distance']) if permission else 3.0
+    departure_required = (distance < 18 and allowed <= gate_at_checkpoint * 3 and
+                          (row['region'] - 1) * 5 + gate_at_checkpoint - 1 in
+                          {(p['region'] - 1) * 5 + p['gate'] - 1 for p in completed})
+    return {'departureRequired': departure_required, 'region': row['region'], 'distance': distance,
             'progress': round(distance / 18.0, 6), 'arrived': distance >= 18,
             'startedAt': row['started_at'],
             'completedGates': sorted((p['region'] - 1) * 5 + p['gate'] - 1 for p in completed)}
@@ -235,6 +247,23 @@ def play_puzzle(region: int, gate: int, body: PuzzleAction, lang: Language = 'ko
     result = gate_rpc(db, user_id, region, gate, body.operation, **parameters)
     return gate_response(result, region, gate, lang, board if result['changed'] else None)
 
+
+
+class GateDeparture(BaseModel):
+    region: int = Field(ge=1, le=8)
+    gate: int = Field(ge=1, le=5)
+
+
+@router.post('/depart-gate')
+def depart_gate(body: GateDeparture, db=Depends(get_supabase), user=Depends(get_current_user)):
+    user_id = int(user['user_id'])
+    # SQL verifies the gate completion and performs an atomic, monotonic unlock.
+    ok = db.rpc('adventure_depart_gate_v1', {
+        'p_user_id': user_id, 'p_region': body.region, 'p_gate': body.gate,
+    }).execute().data
+    if not ok:
+        raise HTTPException(status_code=409, detail='Gate is not completed or departure is unavailable')
+    return journey_public_state(db, user_id)
 
 @router.post('/next-region')
 def next_region(body: RegionAdvance, db=Depends(get_supabase), user=Depends(get_current_user)):
