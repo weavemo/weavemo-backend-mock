@@ -1,4 +1,4 @@
-# C:\Users\myh03\project_weavemo\weavemo-backend-mock\routers\post_media.py
+# weavemo-backend-mock/routers/post_media.py
 
 import logging
 from fastapi.responses import Response
@@ -26,6 +26,38 @@ from services.post_image import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 BUCKET = "post-media"
+
+
+def _metadata_state(supabase, storage_path: str) -> str:
+    """Return saved/missing/unknown; never assume a failed response means no commit."""
+    try:
+        result = (
+            supabase.table("post_media")
+            .select("id")
+            .eq("storage_path", storage_path)
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            return "saved"
+        # Only a successful, unambiguous empty read confirms absence.
+        return "missing" if result.data == [] else "unknown"
+    except Exception:
+        logger.exception("Post image metadata reconciliation failed")
+        return "unknown"
+
+
+def _cleanup_if_missing(supabase, bucket, storage_path: str) -> str:
+    """Delete only after confirming no metadata references this exact path."""
+    state = _metadata_state(supabase, storage_path)
+    if state != "missing":
+        return state
+    try:
+        bucket.remove([storage_path])
+        return "removed"
+    except Exception:
+        logger.exception("Post image orphan cleanup failed: %s", storage_path)
+        return "cleanup_failed"
 
 
 @router.post("/{post_id}/media", status_code=201)
@@ -97,37 +129,24 @@ def upload_post_image(
             .execute()
         )
     except APIError as exc:
+        state = _cleanup_if_missing(supabase, bucket, storage_path)
+        if state == "saved":
+            # The insert committed despite the error response.
+            logger.warning("Post image metadata committed despite API error")
+            raise HTTPException(status_code=503, detail="Image saved; reload the post")
         if exc.code == "23505":
-             # 동시 업로드로 충돌하면 이번 요청이 올린 사진만 삭제한다.
-            try:
-                bucket.remove([storage_path])
-            except Exception:
-                logger.exception("Duplicate image cleanup failed")
-
-            raise HTTPException(
-                status_code=409,
-                detail="This post already has an image",
-            )
-
-        logger.exception("Post image metadata insert failed")
-        raise HTTPException(
-            status_code=503,
-            detail="Could not save image information",
-        )
+            raise HTTPException(status_code=409, detail="This post already has an image")
+        logger.exception("Post image metadata insert failed; reconciliation=%s", state)
+        raise HTTPException(status_code=503, detail="Could not confirm image save; reload the post")
     except Exception:
-        # DB에는 저장됐지만 응답만 유실됐을 수 있으므로
-        # 이 단계에서는 Storage의 사진을 삭제하지 않는다.
-        logger.exception("Post image metadata save uncertain")
-        raise HTTPException(
-            status_code=503,
-            detail="Could not confirm image save; reload the post",
-        )
+        state = _cleanup_if_missing(supabase, bucket, storage_path)
+        logger.exception("Post image metadata save uncertain; reconciliation=%s", state)
+        raise HTTPException(status_code=503, detail="Could not confirm image save; reload the post")
 
     if not result.data:
-        raise HTTPException(
-            status_code=503,
-            detail="Could not confirm image save; reload the post",
-        )
+        state = _cleanup_if_missing(supabase, bucket, storage_path)
+        logger.error("Post image insert returned no data; reconciliation=%s", state)
+        raise HTTPException(status_code=503, detail="Could not confirm image save; reload the post")
 
     media = result.data[0]
 
