@@ -1,3 +1,4 @@
+// weavemo-backend-mock/services/adventure_puzzles/engine.cjs
 const catalog = [
   [
     "햇살의 들판",
@@ -253,80 +254,67 @@ function rotatePipes(z) {
   });
 }
 function scale(z) {
-  let w = [
-      [2, 3, 5, 9, 12],
-      [3, 4, 6, 11, 14],
-      [4, 7, 9, 15, 20],
-    ][z],
-    goal = w[1] + w[3],
-    sel = [];
+  // Gate 4: a unique three-weight combination, rather than an obvious pair.
+  const cases = [
+    { weights: [2, 4, 7, 11, 16, 23, 31], selected: [0, 3, 6] },
+    { weights: [3, 6, 10, 15, 22, 30, 41], selected: [1, 4, 6] },
+    { weights: [4, 9, 13, 20, 28, 39, 52], selected: [0, 4, 6] },
+  ];
+  const c = cases[z], w = c.weights;
+  const all = [];
+  for (let i = 0; i < w.length; i++)
+    for (let j = i + 1; j < w.length; j++)
+      for (let k = j + 1; k < w.length; k++) all.push({sum:w[i]+w[j]+w[k], ids:[i,j,k]});
+  const unique = all.filter(x => all.filter(y => y.sum === x.sum).length === 1);
+  if (!unique.length) throw Error('저울 문제 정답이 유일하지 않습니다');
+  const goal = unique[Math.min(z + 2, unique.length - 1)].sum;
+  let sel = [];
   return mk({
-    description: `서로 다른 무게의 추 ${w.join("·")}g 중 정확히 두 개를 왼쪽 접시에 놓아 ${goal}g을 만드세요. 추를 클릭해 올리거나 내릴 수 있습니다.`,
-    render: () =>
-      `<div class="row" style="justify-content:center">${w.map((n, i) => b("⚖️ " + n + "g", "s" + i, sel.includes(i) ? "chosen" : "")).join("")}</div><div class="row spaced"><h3>왼쪽 접시 ${sel.reduce((a, i) => a + w[i], 0)}g</h3><h3>목표 ${goal}g</h3></div><div class="bar"><div style="width:${Math.min(100, (sel.reduce((a, i) => a + w[i], 0) / goal) * 100)}%"></div></div>`,
+    description: `서로 다른 무게의 추 ${w.join('·')}g 중 정확히 세 개를 골라 ${goal}g을 만드세요. 세 개의 합이 목표와 정확히 같아야 합니다.`,
+    render: () => `<div class="row" style="justify-content:center">${w.map((n, i) => b('⚖️ ' + n + 'g', 's' + i, sel.includes(i) ? 'chosen' : '')).join('')}</div><div class="row spaced"><h3>왼쪽 접시 ${sel.reduce((a, i) => a + w[i], 0)}g</h3><h3>목표 ${goal}g</h3></div><p class="small">${sel.length}/3개 선택</p>`,
     act: (a) => {
-      let i = +a.slice(1);
-      sel = sel.includes(i)
-        ? sel.filter((x) => x !== i)
-        : sel.length < 2
-          ? [...sel, i]
-          : sel;
+      const i = Number(a.slice(1));
+      if (!a.startsWith('s') || !Number.isInteger(i) || i < 0 || i >= w.length) return;
+      sel = sel.includes(i) ? sel.filter(x => x !== i) : sel.length < 3 ? [...sel, i] : sel;
     },
-    check: () => sel.length === 2 && sel.reduce((a, i) => a + w[i], 0) === goal,
+    check: () => sel.length === 3 && sel.reduce((a, i) => a + w[i], 0) === goal,
   });
 }
 function cipher(z) {
-  const sym = ["☀", "☾", "✦", "♣"];
-  const answers = [
-    [2, 0, 3, 1],
-    [1, 3, 0, 2],
-    [3, 1, 2, 0],
-  ];
-  const answer = answers[z].map((i) => sym[i]);
-  let perms = [];
-  function perm(a, b) {
-    if (!a.length) {
-      perms.push(b);
-      return;
-    }
-    a.forEach((x, i) =>
-      perm(
-        a.filter((_, j) => j !== i),
-        [...b, x],
-      ),
-    );
+  // Gate 5: five-symbol Mastermind-style deduction, with a verified unique solution.
+  const sym = ['☀', '☾', '✦', '♣', '◆'];
+  const answers = [[2,0,4,3,1],[1,4,0,2,3],[3,1,4,0,2]];
+  const answer = answers[z].map(i => sym[i]);
+  const perms = [];
+  function perm(rest, prefix) {
+    if (!rest.length) { perms.push(prefix); return; }
+    rest.forEach((x,i) => perm(rest.filter((_,j) => i !== j), [...prefix,x]));
   }
   perm(sym, []);
-  const score = (a, b) => a.filter((x, i) => x === b[i]).length;
-  let candidates = perms.slice(),
-    clues = [];
-  for (let guess of perms.filter((p) => p.join("") !== answer.join(""))) {
-    let count = score(guess, answer);
-    let next = candidates.filter((p) => score(p, guess) === count);
-    if (next.length < candidates.length) {
-      clues.push({ guess, count });
-      candidates = next;
+  const score = (a,b) => a.filter((x,i) => x === b[i]).length;
+  let candidates = perms.slice(), clues = [];
+  // Each clue reduces the candidate space, but does not reveal the answer.
+  for (const guess of perms.filter(p => p.join('') !== answer.join(''))) {
+    const count = score(guess, answer);
+    const next = candidates.filter(p => score(p,guess) === count);
+    if (next.length < candidates.length && next.length >= 1) {
+      clues.push({guess,count}); candidates = next;
     }
-    if (candidates.length === 1 && clues.length >= 3) break;
+    if (candidates.length === 1 && clues.length >= 4) break;
   }
-  if (candidates.length !== 1 || clues.some((c) => c.count === 4))
-    throw Error("암호 문제 생성 오류");
-  let state = [...sym],
-    selected = -1;
+  if (candidates.length !== 1 || clues.length < 4 || clues.some(c => c.count === 5))
+    throw Error('암호 문제 생성 오류');
+  let state = [...sym], selected = -1;
   return mk({
-    description:
-      "네 문양의 순서를 추론하세요. 단서 숫자는 올바른 위치에 있는 문양 수입니다. 문양 두 개를 클릭하면 서로 교환됩니다.",
-    render: () =>
-      `<div class="row" style="justify-content:center">${state.map((x, i) => b(x, "s" + i, selected === i ? "tile chosen" : "tile")).join("")}</div><h3>단서</h3>${clues.map((x) => `<p class="pill">${x.guess.join("　")} · 일치 ${x.count}개</p>`).join("")}`,
+    description: '다섯 문양의 순서를 추론하세요. 각 단서의 숫자는 정확한 위치에 있는 문양의 수입니다. 문양 두 개를 클릭하면 서로 교환됩니다.',
+    render: () => `<div class="row" style="justify-content:center">${state.map((x,i) => b(x,'s'+i,selected === i ? 'tile chosen':'tile')).join('')}</div><h3>단서</h3>${clues.map(x => `<p class="pill">${x.guess.join('　')} · 일치 ${x.count}개</p>`).join('')}`,
     act: (a) => {
-      let i = +a.slice(1);
+      const i = Number(a.slice(1));
+      if (!a.startsWith('s') || !Number.isInteger(i) || i < 0 || i >= sym.length) return;
       if (selected < 0) selected = i;
-      else {
-        [state[selected], state[i]] = [state[i], state[selected]];
-        selected = -1;
-      }
+      else { [state[selected],state[i]] = [state[i],state[selected]]; selected = -1; }
     },
-    check: () => state.join("") === answer.join(""),
+    check: () => state.join('') === answer.join(''),
   });
 }
 
@@ -523,21 +511,19 @@ function trees(z) {
 }
 
 function gears(z) {
-  let sizes = [8, 12, 16, 20],
-    turn = [0, 0, 0, 0],
-    target = (z + 1) % 4;
+  const sizes=[8,12,16,20], arrows=["↑","→","↓","←"];
+  const sequences=[[0,2,1,3,0,2],[1,3,2,0,1,3,2],[3,1,0,2,3,0,1,0]];
+  const turn=[0,0,0,0],target=[0,0,0,0];
+  function rotate(board,i,delta){board[i]=(board[i]+delta+4)%4;board[(i+1)%4]=(board[(i+1)%4]-delta+4)%4;}
+  sequences[z].forEach(i=>rotate(target,i,1));
   return mk({
-    description:
-      "맞물린 기어 네 개를 조작하세요. 첫 기어를 시계방향으로 한 칸 돌리면 다음 기어는 반시계방향으로 같은 각도만큼 돕니다. 네 번째 기어의 화살표가 목표 방향에 도달하게 하세요.",
-    render: () =>
-      `<div class="row" style="justify-content:center">${turn.map((x, i) => `<div class="tile" style="text-align:center">⚙️<div>${["↑", "→", "↓", "←"][x]}</div><div class="small">${sizes[i]}톱니</div></div>`).join("")}</div><p>마지막 기어 목표: ${["↑", "→", "↓", "←"][target]}</p><div class="row">${b("첫 기어 ↻", "cw")}${b("첫 기어 ↺", "ccw")}</div>`,
-    act: (a) => {
-      let d = a === "cw" ? 1 : 3;
-      turn = turn.map((x, i) => (x + (i % 2 ? 4 - d : d)) % 4);
-    },
-    check: () => turn[3] === target,
+    description:"맞물린 네 기어의 화살표를 모두 목표 방향으로 맞추세요. 기어 하나를 시계방향으로 90° 돌리면 오른쪽에 맞물린 기어는 반시계방향으로 90° 돌아갑니다. 마지막 기어는 첫 기어와 연결되어 있습니다.",
+    render:()=>`<div class="row" style="justify-content:center">${turn.map((x,i)=>b(`⚙️ ${sizes[i]}톱니 · ${arrows[x]}<div class="small">목표 ${arrows[target[i]]}</div>`,"g"+i,"tile")).join("")}</div><p>각 기어를 눌러 회전시키세요.</p>`,
+    act:a=>{if(/^g[0-3]$/.test(a))rotate(turn,+a.slice(1),1);},
+    check:()=>turn.every((x,i)=>x===target[i]),
   });
 }
+
 function maze(z) {
   let N = 5,
     walls = new Set([1, 6, 8, 11, 13, 16, 18, 23]);
@@ -1014,52 +1000,41 @@ function rune(z) {
   });
 }
 function substitution(z) {
-  let shifts = [2, 3, 4],
-    plain = ["BIRD", "TREE", "MOON"][z],
-    shift = shifts[z],
-    enc = [...plain]
-      .map((c) =>
-        String.fromCharCode(65 + ((c.charCodeAt(0) - 65 + shift) % 26)),
-      )
-      .join(""),
-    val = "";
+  const cases=[
+    {plain:"STARLIGHT", shift:11, clue:"세 번 회전한 4칸과 1칸의 합에서 2칸을 뺀 값"},
+    {plain:"WILDFLOWER", shift:17, clue:"5칸씩 네 번 이동하고 3칸 되돌린 값"},
+    {plain:"MOONSHADOW", shift:19, clue:"7칸씩 세 번 이동하고 2칸 되돌린 값"},
+  ];
+  const c=cases[z];
+  const enc=[...c.plain].map(ch=>String.fromCharCode(65+(ch.charCodeAt(0)-65+c.shift)%26)).join("");
+  let val="";
   return mk({
-    description: `문자 암호 ${enc}를 해독하세요. 모든 알파벳은 동일한 칸수만큼 앞으로 밀렸습니다. 이동 칸수는 ${shift}칸입니다. 입력창에 원문을 입력하세요.`,
-    render: () =>
-      `<p style="font-size:32px;letter-spacing:8px;text-align:center">${enc}</p><input placeholder="원문 영어"/>`,
-    setValue: (x) => (val = x.toUpperCase().replace(/[^A-Z]/g, "")),
-    act: () => {},
-    check: () => val === plain,
+    description:`문자 암호 ${enc}를 해독하세요. 알파벳은 같은 칸수만큼 앞으로 밀렸습니다(끝은 A로 순환). 이동 칸수 단서: ${c.clue}. 원문 영어를 입력하세요.`,
+    render:()=>`<p style="font-size:27px;letter-spacing:4px;text-align:center">${enc}</p><input placeholder="원문 영어"/>`,
+    setValue:x=>{val=String(x).toUpperCase().replace(/[^A-Z]/g,"");},
+    act:()=>{},check:()=>val===c.plain,
   });
 }
+
 function icePartition(z) {
-  let N = 4,
-    selected = new Set(),
-    goal = [4, 6, 8][z],
-    width = [2, 3, 4][z],
-    height = goal / width;
+  const cases=[
+    {w:3,h:2,x:1,y:2},
+    {w:2,h:3,x:2,y:1},
+    {w:3,h:3,x:1,y:1},
+  ];
+  const c=cases[z], N=5, selected=new Set();
+  const target=new Set();
+  for(let y=c.y;y<c.y+c.h;y++)for(let x=c.x;x<c.x+c.w;x++)target.add(y*N+x);
+  const rowCounts=Array.from({length:N},(_,y)=>[...target].filter(i=>Math.floor(i/N)===y).length);
+  const colCounts=Array.from({length:N},(_,x)=>[...target].filter(i=>i%N===x).length);
   return mk({
-    description: `4×4 얼음판에서 정확히 ${goal}칸을 선택하세요. 선택한 칸은 왼쪽 위 칸을 포함한 직사각형이어야 합니다. 가로 ${width}칸, 세로 ${height}칸입니다.`,
-    render: () =>
-      `<div class="grid" style="grid-template-columns:repeat(4,1fr);max-width:420px">${Array.from({ length: 16 }, (_, i) => b(selected.has(i) ? "🟦" : "⬜", "c" + i, "cell")).join("")}</div><p>${selected.size}/${goal}칸 선택</p>`,
-    act: (a) => {
-      let i = +a.slice(1);
-      selected.has(i) ? selected.delete(i) : selected.add(i);
-    },
-    check: () => {
-      if (selected.size !== goal) return false;
-      let a = [...selected],
-        xs = a.map((i) => i % 4),
-        ys = a.map((i) => Math.floor(i / 4));
-      return (
-        Math.min(...xs) === 0 &&
-        Math.min(...ys) === 0 &&
-        Math.max(...xs) + 1 === width &&
-        Math.max(...ys) + 1 === height
-      );
-    },
+    description:`5×5 얼음판에서 직사각형 한 조각을 분리하세요. 가로 ${c.w}칸, 세로 ${c.h}칸입니다. 각 행·열의 숫자는 분리해야 하는 칸의 개수입니다. 행: ${rowCounts.join("/")}; 열: ${colCounts.join("/")}.`,
+    render:()=>`<p>행: ${rowCounts.join(" · ")} / 열: ${colCounts.join(" · ")}</p><div class="grid" style="grid-template-columns:repeat(5,1fr);max-width:420px">${Array.from({length:25},(_,i)=>b(selected.has(i)?"🟦":"⬜","c"+i,"cell")).join("")}</div><p>${selected.size}/${target.size}칸 선택</p>`,
+    act:a=>{if(!/^c(?:[0-9]|1[0-9]|2[0-4])$/.test(a))return;const i=+a.slice(1);selected.has(i)?selected.delete(i):selected.add(i);},
+    check:()=>selected.size===target.size&&[...target].every(i=>selected.has(i)),
   });
 }
+
 function constellation(z) {
   let n = 5 + z,
     visited = [0],
@@ -1256,55 +1231,22 @@ function ferryVar(z) {
 }
 function assemblyVar(z) {
   const parts = ["기초판", "축", "기어", "덮개", "손잡이", "잠금핀"];
-  const orders = [
-    [0, 1, 2, 3, 4, 5],
-    [0, 2, 1, 4, 3, 5],
-    [1, 0, 3, 2, 5, 4],
+  const cases = [
+    [[0,2],[0,3],[1,3],[1,4],[2,4],[3,5],[4,5]],
+    [[1,0],[1,2],[0,4],[2,3],[4,3],[3,5]],
+    [[2,0],[2,4],[0,1],[4,1],[1,5],[4,3],[3,5]],
   ];
-  const edges = [
-    [
-      [0, 1],
-      [1, 2],
-      [2, 3],
-      [3, 4],
-      [4, 5],
-    ],
-    [
-      [0, 2],
-      [0, 1],
-      [2, 4],
-      [1, 3],
-      [4, 5],
-      [3, 5],
-    ],
-    [
-      [1, 0],
-      [1, 3],
-      [0, 2],
-      [3, 5],
-      [2, 4],
-      [5, 4],
-    ],
-  ][z];
-  let picked = [],
-    remain = parts.map((_, i) => i);
-  const can = (i) => edges.every(([a, b]) => b !== i || picked.includes(a));
+  const edges=cases[z];
+  let picked=[], mistakes=0;
+  const can=i=>edges.every(([a,b])=>b!==i || picked.includes(a));
   return mk({
-    description:
-      "부품 6개를 조립하세요. 선행 부품을 먼저 놓아야 하며 조건을 위반한 선택은 거부됩니다. 모든 부품을 설치하면 성공합니다. 의존 관계: " +
-      edges.map(([a, b]) => parts[a] + " → " + parts[b]).join(" / "),
-    render: () =>
-      `<p>설치 완료: ${picked.map((i) => parts[i]).join(" → ") || "없음"}</p><div class="row">${remain.map((i) => b("🔩 " + parts[i], "p" + i)).join("")}</div><p class="small muted">${picked.length}/6 부품 설치</p>`,
-    act: (a) => {
-      let i = +a.slice(1);
-      if (remain.includes(i) && can(i)) {
-        picked.push(i);
-        remain = remain.filter((x) => x !== i);
-      }
-    },
-    check: () => picked.length === 6,
+    description: "부품 여섯 개의 조립 순서를 추론하세요. 선행 부품이 설치되지 않은 상태에서 부품을 누르면 안전장치가 작동해 조립이 처음부터 초기화됩니다. 의존 관계: " + edges.map(([a,b])=>parts[a]+" → "+parts[b]).join(" / "),
+    render:()=>`<p>설치: ${picked.map(i=>parts[i]).join(" → ")||"없음"} · 초기화 ${mistakes}회</p><div class="row">${parts.map((name,i)=>picked.includes(i)?"":b("🔩 "+name,"p"+i)).join("")}</div><p>${picked.length}/6</p>`,
+    act:a=>{if(!/^p[0-5]$/.test(a))return;const i=+a.slice(1);if(picked.includes(i))return;if(can(i))picked.push(i);else {picked=[];mistakes++;}},
+    check:()=>picked.length===6,
   });
 }
+
 function relicVar(z) {
   const icons = ["🏺", "🗿", "💎", "🪙", "📜"];
   const cases = [
@@ -1698,42 +1640,27 @@ module.exports = {
 
 // Each observatory variant asks for a different ordering from the supplied clues.
 function observatory(z) {
-  const bodies = ["☀️", "🌙", "🪐", "⭐"];
-  const orders = [
-    [2, 0, 3, 1],
-    [3, 1, 0, 2],
-    [1, 3, 2, 0],
-  ];
-  const target = orders[z];
-  const clues = [
-    [target[0], target[1]],
-    [target[2], target[3]],
-    [target[1], target[2]],
-  ];
-  const state = [0, 1, 2, 3];
-  let selected = -1;
-  return {
-    description:
-      "천체 네 개를 왼쪽부터 배열하세요. 단서: " +
-      clues
-        .map(([a, d]) => bodies[a] + "는 " + bodies[d] + "보다 앞")
-        .join(" / "),
-    render: () =>
-      '<div class="row">' +
-      state
-        .map((i, j) =>
-          b(bodies[i], "s" + j, selected === j ? "chosen" : "tile"),
-        )
-        .join("") +
-      "</div>",
-    act: (action) => {
-      const index = Number(action.slice(1));
-      if (selected < 0) selected = index;
-      else {
-        [state[selected], state[index]] = [state[index], state[selected]];
-        selected = -1;
-      }
-    },
-    check: () => state.every((i, j) => i === target[j]),
-  };
+  const bodies=["☀️","🌙","🪐","⭐","☄️","🌎"];
+  const targets=[[2,5,0,4,1,3],[4,1,5,3,0,2],[3,0,4,2,5,1]];
+  const target=targets[z], state=[0,1,2,3,4,5];
+  // Non-adjacent ordering clues are deliberately interleaved.
+  const pairs=[[0,3],[1,4],[2,5],[0,2],[3,5],[1,3],[2,4],[0,1],[4,5]];
+  const clues=pairs.map(([a,b])=>[target[a],target[b]]);
+  // Ensure the displayed clues determine one ordering, not several.
+  const allOrders = (items) => items.length === 0 ? [[]] :
+    items.flatMap((item,i) => allOrders(items.filter((_,j) => j !== i)).map(rest => [item,...rest]));
+  const valid = order => clues.every(([a,b]) => order.indexOf(a) < order.indexOf(b));
+  for (let i=0;i<target.length-1;i++) {
+    if (allOrders([0,1,2,3,4,5]).filter(valid).length === 1) break;
+    const next=[target[i],target[i+1]];
+    if (!clues.some(([a,b]) => a===next[0] && b===next[1])) clues.push(next);
+  }
+  if (allOrders([0,1,2,3,4,5]).filter(valid).length !== 1) throw Error('천체 순서 단서가 유일하지 않습니다');
+  let selected=-1;
+  return mk({
+    description:"천체 여섯 개를 왼쪽부터 배열하세요. 모든 선후 관계를 동시에 만족해야 합니다. 단서: "+clues.map(([a,b])=>bodies[a]+"는 "+bodies[b]+"보다 앞").join(" / "),
+    render:()=>`<div class="row">${state.map((i,j)=>b(bodies[i],"s"+j,selected===j?"chosen":"tile")).join("")}</div><p>두 천체를 차례로 눌러 위치를 교환하세요.</p>`,
+    act:a=>{if(!/^s[0-5]$/.test(a))return;const i=+a.slice(1);if(selected<0)selected=i;else{[state[selected],state[i]]=[state[i],state[selected]];selected=-1;}},
+    check:()=>state.every((i,j)=>i===target[j]),
+  });
 }

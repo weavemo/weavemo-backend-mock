@@ -1,3 +1,4 @@
+// weavemo-backend-mock/services/adventure_puzzles/run.cjs
 const { readFileSync } = require("node:fs");
 const {
   make,
@@ -31,7 +32,7 @@ function englishInstruction(k, z, description) {
     case 1:
       return `The four travelers take ${numbers.slice(0, 4).join(", ")} minutes respectively. Select one or two travelers on the torch side and cross. A pair takes the slower traveler’s time. Move everyone across within ${numbers[4]} minutes.`;
     case 3:
-      return `Select exactly two weights to reach ${numbers.at(-1)} g on the left pan.`;
+      return `Select exactly three distinct weights to reach ${numbers.at(-1)} g on the left pan.`;
     case 10:
       return "Raise each gate to increase its own water level and lower its immediate neighbors. Levels wrap between 0 and 3. Match all three targets.";
     case 11:
@@ -48,13 +49,13 @@ function englishInstruction(k, z, description) {
     case 17:
       return `The left weight is ${numbers[0]} kg at distance ${numbers[1]}, producing torque ${numbers[2]}. Choose the right weight and distance with equal torque.`;
     case 19:
-      return "Install all six parts. In each dependency below, install the part before the arrow first.";
+      return "Install all six parts in dependency order. An invalid choice resets the entire assembly. Every arrow means the left part must be installed before the right part.";
     case 20:
       return "Rotate the disks to match their target arrows. Each click also rotates the next disk to the right, wrapping at the end.";
     case 22:
       return "Arrange the five artifacts from left to right. For each clue below, the first artifact must come before the second.";
     case 23:
-      return `Decode the displayed word. Each letter was shifted forward ${numbers[0]} places in the alphabet.`;
+      return `Decode the encrypted English word. The alphabet wraps after Z. The forward shift is ${["(3 × 4) + 1 − 2", "(5 × 4) − 3", "(7 × 3) − 2"][z]} positions.`;
     case 24:
     case 39:
       return `Press a switch to toggle it and its immediate neighbors. Match the target using at most ${numbers.at(-1)} presses.`;
@@ -65,7 +66,7 @@ function englishInstruction(k, z, description) {
     case 27:
       return `Move right or down to the rescue point. Each entered cell adds its risk score. Find a path with the minimum risk of ${numbers[0]}.`;
     case 28:
-      return `Select exactly ${numbers[2]} cells in the 4×4 grid. Form a rectangle ${numbers[3]} cells wide and ${numbers[4]} cells high that includes the upper-left cell.`;
+      return `Select a ${[3,2,3][z]}-wide by ${[2,3,3][z]}-high rectangle in the 5×5 grid. Match the row and column totals shown on the board.`;
     case 29:
       return `Reach the flag by moving right or down. Entering a cell costs its printed number. Stay within a budget of ${numbers[0]}.`;
     case 30:
@@ -75,7 +76,7 @@ function englishInstruction(k, z, description) {
     case 33:
       return "Match all four planet phases. Pressing a planet advances it and its immediate neighbor to the left, wrapping at the edge. Phases cycle from 0 to 3.";
     case 34:
-      return "Arrange the four celestial bodies from left to right. For each clue below, the first body must come before the second.";
+      return "Arrange six celestial bodies left to right. Satisfy all ordering clues; each arrow means the first body must precede the second.";
     case 35:
       return `Toggle the light sources to produce ${["yellow", "cyan", "magenta"][z]} light using additive color mixing.`;
     case 36:

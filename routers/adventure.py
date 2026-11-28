@@ -267,11 +267,5 @@ def depart_gate(body: GateDeparture, db=Depends(get_supabase), user=Depends(get_
 
 @router.post('/next-region')
 def next_region(body: RegionAdvance, db=Depends(get_supabase), user=Depends(get_current_user)):
-    user_id = int(user['user_id'])
-    settle_journey(db, user_id)
-    moved = db.rpc('adventure_next_region_v1', {
-        'p_user_id': user_id, 'p_region': body.region,
-    }).execute().data
-    if not moved:
-        raise HTTPException(status_code=409, detail='Region is not complete')
-    return journey_public_state(db, user_id)
+    # One journey ends at its own destination; never advance to another region.
+    raise HTTPException(status_code=409, detail='Journey ends at its destination; next-region is disabled')
